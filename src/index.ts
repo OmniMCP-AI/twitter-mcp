@@ -11,6 +11,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { TwitterClient } from './twitter-api.js';
 import { ResponseFormatter } from './formatter.js';
+import { OAuth2Helper } from './oauth2.js';
 import {
   Config, ConfigSchema,
   PostTweetSchema, SearchTweetsSchema,
@@ -64,6 +65,59 @@ export class TwitterServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
+          name: 'oauth2_generate_auth_url',
+          description: 'Generate OAuth2 authorization URL for Twitter authentication',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              client_id: {
+                type: 'string',
+                description: 'Twitter OAuth2 client ID'
+              },
+              redirect_uri: {
+                type: 'string',
+                description: 'OAuth2 redirect URI'
+              },
+              scopes: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'OAuth2 scopes (optional, defaults to tweet.read, tweet.write, users.read)'
+              }
+            },
+            required: ['client_id', 'redirect_uri']
+          }
+        } as Tool,
+        {
+          name: 'oauth2_exchange_code',
+          description: 'Exchange OAuth2 authorization code for access token',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              client_id: {
+                type: 'string',
+                description: 'Twitter OAuth2 client ID'
+              },
+              client_secret: {
+                type: 'string',
+                description: 'Twitter OAuth2 client secret'
+              },
+              redirect_uri: {
+                type: 'string',
+                description: 'OAuth2 redirect URI (must match the one used for auth URL)'
+              },
+              code: {
+                type: 'string',
+                description: 'Authorization code received from callback'
+              },
+              code_verifier: {
+                type: 'string',
+                description: 'PKCE code verifier (from oauth2_generate_auth_url response)'
+              }
+            },
+            required: ['client_id', 'client_secret', 'redirect_uri', 'code', 'code_verifier']
+          }
+        } as Tool,
+        {
           name: 'post_tweet',
           description: 'Post a new tweet to Twitter',
           inputSchema: {
@@ -112,6 +166,10 @@ export class TwitterServer {
 
       try {
         switch (name) {
+          case 'oauth2_generate_auth_url':
+            return await this.handleOAuth2GenerateAuthUrl(args);
+          case 'oauth2_exchange_code':
+            return await this.handleOAuth2ExchangeCode(args);
           case 'post_tweet':
             return await this.handlePostTweet(args);
           case 'search_tweets':
@@ -126,6 +184,106 @@ export class TwitterServer {
         return this.handleError(error);
       }
     });
+  }
+
+  private async handleOAuth2GenerateAuthUrl(args: unknown) {
+    const schema = PostTweetSchema.pick({ text: true }).extend({
+      client_id: PostTweetSchema.shape.text,
+      redirect_uri: PostTweetSchema.shape.text,
+      scopes: PostTweetSchema.pick({ text: true }).array().optional()
+    });
+    
+    const result = schema.safeParse(args);
+    if (!result.success) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${result.error.message}`
+      );
+    }
+
+    const oauth2State = OAuth2Helper.generateOAuth2State();
+    const authUrl = OAuth2Helper.generateAuthUrl(
+      {
+        clientId: (args as any).client_id,
+        clientSecret: '', // Not needed for auth URL
+        redirectUri: (args as any).redirect_uri,
+        scopes: (args as any).scopes
+      },
+      oauth2State
+    );
+
+    return {
+      content: [{
+        type: 'text',
+        text: `OAuth2 Authorization Setup:
+
+1. Visit this URL to authorize the application:
+${authUrl}
+
+2. After authorization, you'll be redirected to your redirect URI with a code parameter.
+
+3. Use the following values with the oauth2_exchange_code tool:
+   - Code Verifier: ${oauth2State.codeVerifier}
+   - State: ${oauth2State.state}
+
+Save the code verifier - you'll need it to exchange the authorization code for an access token.`
+      }] as TextContent[]
+    };
+  }
+
+  private async handleOAuth2ExchangeCode(args: unknown) {
+    const schema = PostTweetSchema.pick({ text: true }).extend({
+      client_id: PostTweetSchema.shape.text,
+      client_secret: PostTweetSchema.shape.text,
+      redirect_uri: PostTweetSchema.shape.text,
+      code: PostTweetSchema.shape.text,
+      code_verifier: PostTweetSchema.shape.text
+    });
+    
+    const result = schema.safeParse(args);
+    if (!result.success) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${result.error.message}`
+      );
+    }
+
+    const tokenResponse = await OAuth2Helper.exchangeCodeForToken(
+      {
+        clientId: (args as any).client_id,
+        clientSecret: (args as any).client_secret,
+        redirectUri: (args as any).redirect_uri
+      },
+      (args as any).code,
+      (args as any).code_verifier
+    );
+
+    const expiresAt = tokenResponse.expires_in ? 
+      Math.floor(Date.now() / 1000) + tokenResponse.expires_in : undefined;
+
+    return {
+      content: [{
+        type: 'text',
+        text: `OAuth2 Token Exchange Successful!
+
+Access Token: ${tokenResponse.access_token}
+Token Type: ${tokenResponse.token_type}
+${tokenResponse.refresh_token ? `Refresh Token: ${tokenResponse.refresh_token}` : ''}
+${tokenResponse.expires_in ? `Expires In: ${tokenResponse.expires_in} seconds` : ''}
+${expiresAt ? `Expires At: ${expiresAt} (Unix timestamp)` : ''}
+${tokenResponse.scope ? `Scope: ${tokenResponse.scope}` : ''}
+
+Environment Variables for OAuth2:
+AUTH_TYPE=oauth2
+CLIENT_ID=${(args as any).client_id}
+CLIENT_SECRET=${(args as any).client_secret}
+ACCESS_TOKEN=${tokenResponse.access_token}
+${tokenResponse.refresh_token ? `REFRESH_TOKEN=${tokenResponse.refresh_token}` : ''}
+${expiresAt ? `TOKEN_EXPIRES_AT=${expiresAt}` : ''}
+
+You can now use these credentials to initialize the Twitter MCP server with OAuth2 authentication.`
+      }] as TextContent[]
+    };
   }
 
   private async handlePostTweet(args: unknown) {
@@ -216,12 +374,28 @@ export class TwitterServer {
 // Start the server
 dotenv.config();
 
-const config = {
-  apiKey: process.env.API_KEY!,
-  apiSecretKey: process.env.API_SECRET_KEY!,
-  accessToken: process.env.ACCESS_TOKEN!,
-  accessTokenSecret: process.env.ACCESS_TOKEN_SECRET!
-};
+const authType = process.env.AUTH_TYPE || 'legacy';
+
+let config: Config;
+
+if (authType === 'oauth2') {
+  config = {
+    authType: 'oauth2',
+    clientId: process.env.CLIENT_ID!,
+    clientSecret: process.env.CLIENT_SECRET!,
+    accessToken: process.env.ACCESS_TOKEN!,
+    refreshToken: process.env.REFRESH_TOKEN,
+    tokenExpiresAt: process.env.TOKEN_EXPIRES_AT ? parseInt(process.env.TOKEN_EXPIRES_AT) : undefined
+  };
+} else {
+  config = {
+    authType: 'legacy',
+    apiKey: process.env.API_KEY!,
+    apiSecretKey: process.env.API_SECRET_KEY!,
+    accessToken: process.env.ACCESS_TOKEN!,
+    accessTokenSecret: process.env.ACCESS_TOKEN_SECRET!
+  };
+}
 
 const server = new TwitterServer(config);
 server.start().catch(error => {

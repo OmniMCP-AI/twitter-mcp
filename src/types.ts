@@ -1,13 +1,32 @@
 import { z } from 'zod';
 
-// Configuration schema with validation
-export const ConfigSchema = z.object({
+// Legacy API v1.1 authentication schema
+export const LegacyConfigSchema = z.object({
     apiKey: z.string().min(1, 'API Key is required'),
     apiSecretKey: z.string().min(1, 'API Secret Key is required'),
     accessToken: z.string().min(1, 'Access Token is required'),
-    accessTokenSecret: z.string().min(1, 'Access Token Secret is required')
+    accessTokenSecret: z.string().min(1, 'Access Token Secret is required'),
+    authType: z.literal('legacy').default('legacy')
 });
 
+// OAuth2 authentication schema
+export const OAuth2ConfigSchema = z.object({
+    clientId: z.string().min(1, 'Client ID is required'),
+    clientSecret: z.string().min(1, 'Client Secret is required'),
+    accessToken: z.string().min(1, 'Access Token is required'),
+    refreshToken: z.string().optional(),
+    authType: z.literal('oauth2'),
+    tokenExpiresAt: z.number().optional() // Unix timestamp
+});
+
+// Unified configuration schema
+export const ConfigSchema = z.discriminatedUnion('authType', [
+    LegacyConfigSchema,
+    OAuth2ConfigSchema
+]);
+
+export type LegacyConfig = z.infer<typeof LegacyConfigSchema>;
+export type OAuth2Config = z.infer<typeof OAuth2ConfigSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
 
 // Tool input schemas
