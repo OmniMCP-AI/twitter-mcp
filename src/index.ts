@@ -148,8 +148,8 @@ export class TwitterServer {
               },
               count: {
                 type: 'number',
-                description: 'Number of tweets to return (10-100)',
-                minimum: 10,
+                description: 'Number of tweets to return (1-100)',
+                minimum: 1,
                 maximum: 100
               }
             },
