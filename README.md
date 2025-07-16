@@ -26,10 +26,9 @@ This MCP server allows Clients to interact with Twitter, enabling posting tweets
       "command": "npx",
       "args": ["-y", "@enescinar/twitter-mcp"],
       "env": {
-        "API_KEY": "your_api_key_here",
-        "API_SECRET_KEY": "your_api_secret_key_here",
-        "ACCESS_TOKEN": "your_access_token_here",
-        "ACCESS_TOKEN_SECRET": "your_access_token_secret_here"
+        "TWITTER_CLIENT_ID": "your_api_key_here",
+        "TWITTER_CLIENT_SECRET": "your_api_secret_key_here",
+        "TWITTER_ACCESS_TOKEN": "your_access_token_here"
       }
     }
   }

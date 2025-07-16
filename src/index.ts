@@ -374,16 +374,16 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 // Start the server
 dotenv.config();
 
-const authType = process.env.AUTH_TYPE || 'legacy';
+const authType = process.env.AUTH_TYPE || 'oauth2';
 
 let config: Config;
 
 if (authType === 'oauth2') {
   config = {
     authType: 'oauth2',
-    clientId: process.env.CLIENT_ID!,
-    clientSecret: process.env.CLIENT_SECRET!,
-    accessToken: process.env.ACCESS_TOKEN!,
+    clientId: process.env.TWITTER_CLIENT_ID!,
+    clientSecret: process.env.TWITTER_CLIENT_SECRET!,
+    accessToken: process.env.TWITTER_ACCESS_TOKEN!,
     refreshToken: process.env.REFRESH_TOKEN,
     tokenExpiresAt: process.env.TOKEN_EXPIRES_AT ? parseInt(process.env.TOKEN_EXPIRES_AT) : undefined
   };
