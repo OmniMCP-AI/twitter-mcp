@@ -64,59 +64,59 @@ export class TwitterServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
-        {
-          name: 'oauth2_generate_auth_url',
-          description: 'Generate OAuth2 authorization URL for Twitter authentication',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              client_id: {
-                type: 'string',
-                description: 'Twitter OAuth2 client ID'
-              },
-              redirect_uri: {
-                type: 'string',
-                description: 'OAuth2 redirect URI'
-              },
-              scopes: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'OAuth2 scopes (optional, defaults to tweet.read, tweet.write, users.read)'
-              }
-            },
-            required: ['client_id', 'redirect_uri']
-          }
-        } as Tool,
-        {
-          name: 'oauth2_exchange_code',
-          description: 'Exchange OAuth2 authorization code for access token',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              client_id: {
-                type: 'string',
-                description: 'Twitter OAuth2 client ID'
-              },
-              client_secret: {
-                type: 'string',
-                description: 'Twitter OAuth2 client secret'
-              },
-              redirect_uri: {
-                type: 'string',
-                description: 'OAuth2 redirect URI (must match the one used for auth URL)'
-              },
-              code: {
-                type: 'string',
-                description: 'Authorization code received from callback'
-              },
-              code_verifier: {
-                type: 'string',
-                description: 'PKCE code verifier (from oauth2_generate_auth_url response)'
-              }
-            },
-            required: ['client_id', 'client_secret', 'redirect_uri', 'code', 'code_verifier']
-          }
-        } as Tool,
+        // {
+        //   name: 'oauth2_generate_auth_url',
+        //   description: 'Generate OAuth2 authorization URL for Twitter authentication',
+        //   inputSchema: {
+        //     type: 'object',
+        //     properties: {
+        //       client_id: {
+        //         type: 'string',
+        //         description: 'Twitter OAuth2 client ID'
+        //       },
+        //       redirect_uri: {
+        //         type: 'string',
+        //         description: 'OAuth2 redirect URI'
+        //       },
+        //       scopes: {
+        //         type: 'array',
+        //         items: { type: 'string' },
+        //         description: 'OAuth2 scopes (optional, defaults to tweet.read, tweet.write, users.read)'
+        //       }
+        //     },
+        //     required: ['client_id', 'redirect_uri']
+        //   }
+        // } as Tool,
+        // {
+        //   name: 'oauth2_exchange_code',
+        //   description: 'Exchange OAuth2 authorization code for access token',
+        //   inputSchema: {
+        //     type: 'object',
+        //     properties: {
+        //       client_id: {
+        //         type: 'string',
+        //         description: 'Twitter OAuth2 client ID'
+        //       },
+        //       client_secret: {
+        //         type: 'string',
+        //         description: 'Twitter OAuth2 client secret'
+        //       },
+        //       redirect_uri: {
+        //         type: 'string',
+        //         description: 'OAuth2 redirect URI (must match the one used for auth URL)'
+        //       },
+        //       code: {
+        //         type: 'string',
+        //         description: 'Authorization code received from callback'
+        //       },
+        //       code_verifier: {
+        //         type: 'string',
+        //         description: 'PKCE code verifier (from oauth2_generate_auth_url response)'
+        //       }
+        //     },
+        //     required: ['client_id', 'client_secret', 'redirect_uri', 'code', 'code_verifier']
+        //   }
+        // } as Tool,
         {
           name: 'post_tweet',
           description: 'Post a new tweet to Twitter',
@@ -135,27 +135,27 @@ export class TwitterServer {
             },
             required: ['text']
           }
-        } as Tool,
-        {
-          name: 'search_tweets',
-          description: 'Search for tweets on Twitter',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'Search query'
-              },
-              count: {
-                type: 'number',
-                description: 'Number of tweets to return (1-100)',
-                minimum: 1,
-                maximum: 100
-              }
-            },
-            required: ['query', 'count']
-          }
         } as Tool
+        // {
+        //   name: 'search_tweets',
+        //   description: 'Search for tweets on Twitter',
+        //   inputSchema: {
+        //     type: 'object',
+        //     properties: {
+        //       query: {
+        //         type: 'string',
+        //         description: 'Search query'
+        //       },
+        //       count: {
+        //         type: 'number',
+        //         description: 'Number of tweets to return (1-100)',
+        //         minimum: 1,
+        //         maximum: 100
+        //       }
+        //     },
+        //     required: ['query', 'count']
+        //   }
+        // } as Tool
       ]
     }));
 
