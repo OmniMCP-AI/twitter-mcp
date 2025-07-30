@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport, StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import http from 'http';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -18,19 +20,20 @@ import {
   TwitterError
 } from './types.js';
 import dotenv from 'dotenv';
+import {randomUUID} from "node:crypto";
 
 export class TwitterServer {
   private server: Server;
-  private client: TwitterClient;
+  // private client: TwitterClient;
 
   constructor(config: Config) {
     // Validate config
-    const result = ConfigSchema.safeParse(config);
-    if (!result.success) {
-      throw new Error(`Invalid configuration: ${result.error.message}`);
-    }
+    // const result = ConfigSchema.safeParse(config);
+    // if (!result.success) {
+    //   throw new Error(`Invalid configuration: ${result.error.message}`);
+    // }
 
-    this.client = new TwitterClient(config);
+    // this.client = new TwitterClient(config);
     this.server = new Server({
       name: 'twitter-mcp',
       version: '1.0.0'
@@ -160,20 +163,17 @@ export class TwitterServer {
     }));
 
     // Handle tool execution
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const { name, arguments: args } = request.params;
       console.error(`Tool called: ${name}`, args);
 
+      const headers = extra?.requestInfo?.headers
+      console.log("Header ==>", headers)
+
       try {
         switch (name) {
-          case 'oauth2_generate_auth_url':
-            return await this.handleOAuth2GenerateAuthUrl(args);
-          case 'oauth2_exchange_code':
-            return await this.handleOAuth2ExchangeCode(args);
           case 'post_tweet':
-            return await this.handlePostTweet(args);
-          case 'search_tweets':
-            return await this.handleSearchTweets(args);
+            return await this.handlePostTweet(args, headers);
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -286,7 +286,23 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     };
   }
 
-  private async handlePostTweet(args: unknown) {
+  private async handlePostTweet(args: unknown, headers?: any) {
+    let client
+    try {
+      const config: Config = {
+        authType: 'oauth2',
+        clientId: headers?.twitter_client_id,
+        clientSecret: headers?.twitter_client_secret,
+        accessToken: headers?.twitter_access_token,
+      }
+      client = new TwitterClient(config)
+    }catch (error: any) {
+      throw new McpError(
+          401,
+          `auth failed with error: ${error.message}`
+      );
+    }
+
     const result = PostTweetSchema.safeParse(args);
     if (!result.success) {
       throw new McpError(
@@ -295,39 +311,11 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       );
     }
 
-    const tweet = await this.client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+    const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
     return {
       content: [{
         type: 'text',
         text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
-      }] as TextContent[]
-    };
-  }
-
-  private async handleSearchTweets(args: unknown) {
-    const result = SearchTweetsSchema.safeParse(args);
-    if (!result.success) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${result.error.message}`
-      );
-    }
-
-    const { tweets, users } = await this.client.searchTweets(
-      result.data.query,
-      result.data.count
-    );
-
-    const formattedResponse = ResponseFormatter.formatSearchResponse(
-      result.data.query,
-      tweets,
-      users
-    );
-
-    return {
-      content: [{
-        type: 'text',
-        text: ResponseFormatter.toMcpResponse(formattedResponse)
       }] as TextContent[]
     };
   }
@@ -365,9 +353,55 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   async start(): Promise<void> {
-    const transport = new StdioServerTransport();
+    const port = parseInt(process.env.PORT || '3333');
+    const options: StreamableHTTPServerTransportOptions = {
+      sessionIdGenerator: undefined
+    }
+    const transport = new StreamableHTTPServerTransport(options);
     await this.server.connect(transport);
-    console.error('Twitter MCP server running on stdio');
+    
+    // Create HTTP server to handle requests
+    const httpServer = http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/mcp') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            if (req.method === 'OPTIONS') {
+              res.writeHead(200);
+              res.end();
+              return;
+            }
+            
+            await transport.handleRequest(req, res, JSON.parse(body));
+          } catch (error) {
+            console.error('HTTP request error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Internal server error' }));
+          }
+        });
+      } else if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.writeHead(200);
+        res.end();
+      } else {
+        res.writeHead(400);
+        res.end('Not Found');
+      }
+    });
+    
+    httpServer.listen(port, () => {
+      console.error(`Twitter MCP server running on HTTP port ${port}`);
+    });
   }
 }
 
