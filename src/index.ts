@@ -291,15 +291,16 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     try {
       const clientId = headers?.twitter_client_id
       const clientSecret = headers?.twitter_client_secret
-      const refreshedToken = await OAuth2Helper.refreshToken(
-          {
-            clientId,
-            clientSecret,
-            redirectUri: '' // Not needed for refresh
-          },
-          headers?.twitter_refresh_token
-      );
-      const accessToken = refreshedToken?.access_token
+      const accessToken = headers?.twitter_access_token
+      // const refreshedToken = await OAuth2Helper.refreshToken(
+      //     {
+      //       clientId,
+      //       clientSecret,
+      //       redirectUri: '' // Not needed for refresh
+      //     },
+      //     headers?.twitter_refresh_token
+      // );
+      // const accessToken = refreshedToken?.access_token
 
       const config: Config = {
         authType: 'oauth2',
