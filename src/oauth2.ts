@@ -29,7 +29,7 @@ async function update_config_prod(userId: string, serverId: string, refreshToken
       user_id: userId,
       mcp_server_id: serverId,
       config:{
-        'SLACK_REFRESH_TOKEN': refreshToken,
+        'TWITTER_REFRESH_TOKEN': refreshToken,
       },
       scope: 'private',
     });
@@ -139,6 +139,8 @@ export class OAuth2Helper {
     }
 
     const result = await response.json();
+
+    console.error('Refresh token:', result);
 
     let extraUpdateConfig = updateConfigUrl
     if (extraUpdateConfig.includes("omnimcp-be-dev")){
