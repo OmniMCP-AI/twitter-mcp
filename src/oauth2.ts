@@ -36,7 +36,7 @@ async function update_config_prod(userId: string, serverId: string, refreshToken
     console.error(response?.data);
   } catch (error) {
     console.error('Error update user config:', error);
-    // throw new Error('Error update user config');
+    throw new Error('Error update user config');
   }
 }
 
