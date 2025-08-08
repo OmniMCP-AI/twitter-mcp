@@ -22,6 +22,19 @@ import {
 import dotenv from 'dotenv';
 import {randomUUID} from "node:crypto";
 
+// Token cache structure
+interface TokenCacheEntry {
+  access_token: string;
+  expires_at: number; // Timestamp when the token expires
+  refresh_token?: string;
+}
+
+const tokenCache: Record<string, TokenCacheEntry> = {};
+
+const ONE_HOUR_MS = 60 * 60;
+
+
+
 export class TwitterServer {
   private server: Server;
   // private client: TwitterClient;
@@ -291,16 +304,45 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     try {
       const clientId = headers?.twitter_client_id
       const clientSecret = headers?.twitter_client_secret
-      const accessToken = headers?.twitter_access_token
-      // const refreshedToken = await OAuth2Helper.refreshToken(
-      //     {
-      //       clientId,
-      //       clientSecret,
-      //       redirectUri: '' // Not needed for refresh
-      //     },
-      //     headers?.twitter_refresh_token
-      // );
-      // const accessToken = refreshedToken?.access_token
+      const refreshToken = headers?.twitter_refresh_token
+      const userId = headers?.user_id
+      const serverId = headers?.server_id
+      const updateConfigUrl = headers?.update_config_url
+
+      let accessToken = headers?.access_token
+
+      const cacheKey = `${userId}:${serverId}`;
+
+      const cachedToken = tokenCache[cacheKey];
+
+      const now = Date.now();
+
+
+      if (cachedToken && cachedToken.expires_at > now) {
+        accessToken = cachedToken.access_token;
+      }else {
+        const refreshedToken = await OAuth2Helper.refreshToken(
+            {
+              clientId,
+              clientSecret,
+              redirectUri: '' // Not needed for refresh
+            },
+            refreshToken,
+            userId,
+            serverId,
+            updateConfigUrl
+        );
+        accessToken = refreshedToken?.access_token
+        tokenCache[cacheKey] = {
+          access_token: refreshedToken?.access_token,
+          expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
+          refresh_token: refreshedToken?.refresh_token,
+        };
+      }
+
+
+      // const accessToken = headers?.twitter_access_token
+
 
       const config: Config = {
         authType: 'oauth2',

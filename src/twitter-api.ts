@@ -28,57 +28,57 @@ export class TwitterClient {
     }
   }
 
-  private async ensureValidToken(): Promise<void> {
-    if (this.config.authType === 'oauth2') {
-      const oauth2Config = this.config as OAuth2Config;
-      
-      // Check if token is expired
-      if (oauth2Config.tokenExpiresAt && Date.now() >= oauth2Config.tokenExpiresAt * 1000) {
-        if (oauth2Config.refreshToken) {
-          try {
-            console.error('Token expired, attempting refresh...');
-            const refreshedToken = await OAuth2Helper.refreshToken(
-              {
-                clientId: oauth2Config.clientId,
-                clientSecret: oauth2Config.clientSecret,
-                redirectUri: '' // Not needed for refresh
-              },
-              oauth2Config.refreshToken
-            );
-            
-            // Update the client with new token
-            this.config = {
-              ...oauth2Config,
-              accessToken: refreshedToken.access_token,
-              refreshToken: refreshedToken.refresh_token || oauth2Config.refreshToken,
-              tokenExpiresAt: refreshedToken.expires_in ? 
-                Math.floor(Date.now() / 1000) + refreshedToken.expires_in : undefined
-            };
-            
-            this.client = new TwitterApi(refreshedToken.access_token);
-            console.error('Token refreshed successfully');
-          } catch (error) {
-            console.error('Token refresh failed:', error);
-            throw new TwitterError(
-              'OAuth2 token expired and refresh failed',
-              'token_expired',
-              401
-            );
-          }
-        } else {
-          throw new TwitterError(
-            'OAuth2 token expired and no refresh token available',
-            'token_expired',
-            401
-          );
-        }
-      }
-    }
-  }
+  // private async ensureValidToken(): Promise<void> {
+  //   if (this.config.authType === 'oauth2') {
+  //     const oauth2Config = this.config as OAuth2Config;
+  //
+  //     // Check if token is expired
+  //     if (oauth2Config.tokenExpiresAt && Date.now() >= oauth2Config.tokenExpiresAt * 1000) {
+  //       if (oauth2Config.refreshToken) {
+  //         try {
+  //           console.error('Token expired, attempting refresh...');
+  //           const refreshedToken = await OAuth2Helper.refreshToken(
+  //             {
+  //               clientId: oauth2Config.clientId,
+  //               clientSecret: oauth2Config.clientSecret,
+  //               redirectUri: '' // Not needed for refresh
+  //             },
+  //             oauth2Config.refreshToken
+  //           );
+  //
+  //           // Update the client with new token
+  //           this.config = {
+  //             ...oauth2Config,
+  //             accessToken: refreshedToken.access_token,
+  //             refreshToken: refreshedToken.refresh_token || oauth2Config.refreshToken,
+  //             tokenExpiresAt: refreshedToken.expires_in ?
+  //               Math.floor(Date.now() / 1000) + refreshedToken.expires_in : undefined
+  //           };
+  //
+  //           this.client = new TwitterApi(refreshedToken.access_token);
+  //           console.error('Token refreshed successfully');
+  //         } catch (error) {
+  //           console.error('Token refresh failed:', error);
+  //           throw new TwitterError(
+  //             'OAuth2 token expired and refresh failed',
+  //             'token_expired',
+  //             401
+  //           );
+  //         }
+  //       } else {
+  //         throw new TwitterError(
+  //           'OAuth2 token expired and no refresh token available',
+  //           'token_expired',
+  //           401
+  //         );
+  //       }
+  //     }
+  //   }
+  // }
 
   async postTweet(text: string, replyToTweetId?: string): Promise<PostedTweet> {
     try {
-      await this.ensureValidToken();
+      // await this.ensureValidToken();
       const endpoint = 'tweets/create';
       await this.checkRateLimit(endpoint);
 
@@ -105,7 +105,7 @@ export class TwitterClient {
 
   async searchTweets(query: string, count: number): Promise<{ tweets: Tweet[], users: TwitterUser[] }> {
     try {
-      await this.ensureValidToken();
+      // await this.ensureValidToken();
       const endpoint = 'tweets/search';
       await this.checkRateLimit(endpoint);
 

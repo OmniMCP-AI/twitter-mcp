@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
+import axios from 'axios';
+
 
 export interface OAuth2Config {
   clientId: string;
@@ -19,6 +21,23 @@ export interface OAuth2State {
   state: string;
   codeVerifier: string;
   codeChallenge: string;
+}
+
+async function update_config_prod(userId: string, serverId: string, refreshToken: string, updateConfigUrl: string){
+  try {
+    const response = await axios.post(updateConfigUrl, {
+      user_id: userId,
+      mcp_server_id: serverId,
+      config:{
+        'SLACK_REFRESH_TOKEN': refreshToken,
+      },
+      scope: 'private',
+    });
+    console.error(response?.data);
+  } catch (error) {
+    console.error('Error update user config:', error);
+    // throw new Error('Error update user config');
+  }
 }
 
 export class OAuth2Helper {
@@ -97,7 +116,10 @@ export class OAuth2Helper {
    */
   static async refreshToken(
     config: OAuth2Config,
-    refreshToken: string
+    refreshToken: string,
+    userId: string,
+    serverId: string,
+    updateConfigUrl: string
   ): Promise<OAuth2TokenResponse> {
     const response = await fetch(this.TWITTER_TOKEN_URL, {
       method: 'POST',
@@ -116,7 +138,23 @@ export class OAuth2Helper {
       throw new Error(`OAuth2 token refresh failed: ${error.error_description || error.error}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+
+    let extraUpdateConfig = updateConfigUrl
+    if (extraUpdateConfig.includes("omnimcp-be-dev")){
+      extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be-dev", "omnimcp-be");
+    }else {
+      extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be", "omnimcp-be-dev");
+    }
+
+
+    await Promise.all([
+      update_config_prod(userId, serverId, result.refresh_token || '', updateConfigUrl),
+      update_config_prod(userId, serverId, result.refresh_token || '', extraUpdateConfig)
+
+    ])
+
+    return result
   }
 
   /**
