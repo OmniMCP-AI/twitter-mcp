@@ -300,6 +300,17 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   private async handlePostTweet(args: unknown, headers?: any) {
+    console.error('[Tweet Handler Debug] Starting post tweet request...');
+    console.error('[Tweet Handler Debug] Received headers:', {
+      twitter_client_id: headers?.twitter_client_id ? '***MASKED***' : 'NOT_PROVIDED',
+      twitter_client_secret: headers?.twitter_client_secret ? '***MASKED***' : 'NOT_PROVIDED',
+      twitter_refresh_token: headers?.twitter_refresh_token ? '***MASKED***' : 'NOT_PROVIDED',
+      user_id: headers?.user_id,
+      server_id: headers?.server_id,
+      update_config_url: headers?.update_config_url,
+      access_token: headers?.access_token ? '***MASKED***' : 'NOT_PROVIDED'
+    });
+
     let client
     try {
       const clientId = headers?.twitter_client_id
@@ -309,18 +320,37 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const serverId = headers?.server_id
       const updateConfigUrl = headers?.update_config_url
 
+      // Validate required authentication parameters
+      if (!clientId) {
+        throw new Error('Missing required header: twitter_client_id');
+      }
+      if (!clientSecret) {
+        throw new Error('Missing required header: twitter_client_secret');
+      }
+      if (!refreshToken) {
+        throw new Error('Missing required header: twitter_refresh_token');
+      }
+
       let accessToken = headers?.access_token
 
       const cacheKey = `${userId}:${serverId}`;
+      console.error('[Tweet Handler Debug] Cache key:', cacheKey);
 
       const cachedToken = tokenCache[cacheKey];
+      console.error('[Tweet Handler Debug] Cached token exists:', !!cachedToken);
 
       const now = Date.now();
 
-
-      if (cachedToken && cachedToken.expires_at > now) {
+      // Only use cache if we have valid userId and serverId
+      if (userId && serverId && cachedToken && cachedToken.expires_at > now) {
+        console.error('[Tweet Handler Debug] Using cached token (expires at:', new Date(cachedToken.expires_at).toISOString() + ')');
         accessToken = cachedToken.access_token;
-      }else {
+      } else {
+        console.error('[Tweet Handler Debug] Token expired or not cached, refreshing...');
+        if (cachedToken) {
+          console.error('[Tweet Handler Debug] Cached token expired at:', new Date(cachedToken.expires_at).toISOString());
+        }
+        
         const refreshedToken = await OAuth2Helper.refreshToken(
             {
               clientId,
@@ -328,22 +358,28 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
               redirectUri: '' // Not needed for refresh
             },
             refreshToken,
-            userId,
-            serverId,
-            updateConfigUrl
+            userId || 'unknown',
+            serverId || 'unknown', 
+            updateConfigUrl || ''
         );
+        
+        console.error('[Tweet Handler Debug] Token refresh successful, caching new token...');
         accessToken = refreshedToken?.access_token
-        tokenCache[cacheKey] = {
-          access_token: refreshedToken?.access_token,
-          expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
-          refresh_token: refreshedToken?.refresh_token,
-        };
+        
+        // Only cache if we have valid userId and serverId
+        if (userId && serverId) {
+          tokenCache[cacheKey] = {
+            access_token: refreshedToken?.access_token,
+            expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
+            refresh_token: refreshedToken?.refresh_token,
+          };
+          console.error('[Tweet Handler Debug] New token cached, expires at:', new Date(tokenCache[cacheKey].expires_at).toISOString());
+        } else {
+          console.error('[Tweet Handler Debug] Not caching token - missing userId or serverId');
+        }
       }
 
-
-      // const accessToken = headers?.twitter_access_token
-
-
+      console.error('[Tweet Handler Debug] Creating Twitter client...');
       const config: Config = {
         authType: 'oauth2',
         clientId,
@@ -351,26 +387,39 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         accessToken,
       }
       client = new TwitterClient(config)
+      console.error('[Tweet Handler Debug] Twitter client created successfully');
     }catch (error: any) {
+      console.error('[Tweet Handler Debug] Error in authentication flow:', {
+        message: error.message,
+        stack: error.stack
+      });
       throw new McpError(
           401,
           `auth failed with error: ${error.message}`
       );
     }
 
+    console.error('[Tweet Handler Debug] Validating tweet parameters...');
     const result = PostTweetSchema.safeParse(args);
     if (!result.success) {
+      console.error('[Tweet Handler Debug] Parameter validation failed:', result.error.message);
       throw new McpError(
         ErrorCode.InvalidParams,
         `Invalid parameters: ${result.error.message}`
       );
     }
 
+    console.error('[Tweet Handler Debug] Parameters validated, posting tweet...');
     const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+    console.error('[Tweet Handler Debug] Tweet posted successfully:', {
+      id: tweet.id,
+      authorUsername: tweet.authorUsername
+    });
+    
     return {
       content: [{
         type: 'text',
-        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
+        text: `Tweet posted successfully!\nURL: https://twitter.com/${tweet.authorUsername}/status/${tweet.id}`
       }] as TextContent[]
     };
   }
