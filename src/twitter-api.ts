@@ -90,7 +90,7 @@ export class TwitterClient {
       console.log(`Posting tweet: ${tweetOptions}`);
 
       const response = await this.client.v2.tweet(tweetOptions);
-      
+
       console.error(`Tweet posted successfully with ID: ${response.data.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
       
       return {
@@ -98,8 +98,9 @@ export class TwitterClient {
         text: response.data.text
       };
     } catch (error) {
-      console.log(error);
-      this.handleApiError(error);
+      throw error;
+      // console.log("Posting tweet", error);
+      // this.handleApiError(error);
     }
   }
 
