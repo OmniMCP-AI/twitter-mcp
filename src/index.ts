@@ -311,34 +311,34 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
       let accessToken = headers?.access_token
 
-      const cacheKey = `${userId}:${serverId}`;
+      // const cacheKey = `${userId}:${serverId}`;
+      //
+      // const cachedToken = tokenCache[cacheKey];
+      //
+      // const now = Date.now();
 
-      const cachedToken = tokenCache[cacheKey];
 
-      const now = Date.now();
-
-
-      if (cachedToken && cachedToken.expires_at > now) {
-        accessToken = cachedToken.access_token;
-      }else {
-        const refreshedToken = await OAuth2Helper.refreshToken(
-            {
-              clientId,
-              clientSecret,
-              redirectUri: '' // Not needed for refresh
-            },
-            refreshToken,
-            userId,
-            serverId,
-            updateConfigUrl
-        );
-        accessToken = refreshedToken?.access_token
-        tokenCache[cacheKey] = {
-          access_token: refreshedToken?.access_token,
-          expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
-          refresh_token: refreshedToken?.refresh_token,
-        };
-      }
+      // if (cachedToken && cachedToken.expires_at > now) {
+      //   accessToken = cachedToken.access_token;
+      // }else {
+      const refreshedToken = await OAuth2Helper.refreshToken(
+          {
+            clientId,
+            clientSecret,
+            redirectUri: '' // Not needed for refresh
+          },
+          refreshToken,
+          userId,
+          serverId,
+          updateConfigUrl
+      );
+      accessToken = refreshedToken?.access_token
+      // tokenCache[cacheKey] = {
+      //   access_token: refreshedToken?.access_token,
+      //   expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
+      //   refresh_token: refreshedToken?.refresh_token,
+      // };
+      // }
 
 
       // const accessToken = headers?.twitter_access_token
