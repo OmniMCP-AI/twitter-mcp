@@ -189,8 +189,8 @@ export class TwitterServer {
             return await this.handlePostTweet(args, headers);
           default:
             throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
+                ErrorCode.MethodNotFound,
+                `Unknown tool: ${name}`
             );
         }
       } catch (error) {
@@ -205,24 +205,24 @@ export class TwitterServer {
       redirect_uri: PostTweetSchema.shape.text,
       scopes: PostTweetSchema.pick({ text: true }).array().optional()
     });
-    
+
     const result = schema.safeParse(args);
     if (!result.success) {
       throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${result.error.message}`
+          ErrorCode.InvalidParams,
+          `Invalid parameters: ${result.error.message}`
       );
     }
 
     const oauth2State = OAuth2Helper.generateOAuth2State();
     const authUrl = OAuth2Helper.generateAuthUrl(
-      {
-        clientId: (args as any).client_id,
-        clientSecret: '', // Not needed for auth URL
-        redirectUri: (args as any).redirect_uri,
-        scopes: (args as any).scopes
-      },
-      oauth2State
+        {
+          clientId: (args as any).client_id,
+          clientSecret: '', // Not needed for auth URL
+          redirectUri: (args as any).redirect_uri,
+          scopes: (args as any).scopes
+        },
+        oauth2State
     );
 
     return {
@@ -252,27 +252,27 @@ Save the code verifier - you'll need it to exchange the authorization code for a
       code: PostTweetSchema.shape.text,
       code_verifier: PostTweetSchema.shape.text
     });
-    
+
     const result = schema.safeParse(args);
     if (!result.success) {
       throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${result.error.message}`
+          ErrorCode.InvalidParams,
+          `Invalid parameters: ${result.error.message}`
       );
     }
 
     const tokenResponse = await OAuth2Helper.exchangeCodeForToken(
-      {
-        clientId: (args as any).client_id,
-        clientSecret: (args as any).client_secret,
-        redirectUri: (args as any).redirect_uri
-      },
-      (args as any).code,
-      (args as any).code_verifier
+        {
+          clientId: (args as any).client_id,
+          clientSecret: (args as any).client_secret,
+          redirectUri: (args as any).redirect_uri
+        },
+        (args as any).code,
+        (args as any).code_verifier
     );
 
-    const expiresAt = tokenResponse.expires_in ? 
-      Math.floor(Date.now() / 1000) + tokenResponse.expires_in : undefined;
+    const expiresAt = tokenResponse.expires_in ?
+        Math.floor(Date.now() / 1000) + tokenResponse.expires_in : undefined;
 
     return {
       content: [{
@@ -300,6 +300,17 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   private async handlePostTweet(args: unknown, headers?: any) {
+    console.error('[Tweet Handler Debug] Starting post tweet request...');
+    console.error('[Tweet Handler Debug] Received headers:', {
+      twitter_client_id: headers?.twitter_client_id ? '***MASKED***' : 'NOT_PROVIDED',
+      twitter_client_secret: headers?.twitter_client_secret ? '***MASKED***' : 'NOT_PROVIDED',
+      twitter_refresh_token: headers?.twitter_refresh_token ? '***MASKED***' : 'NOT_PROVIDED',
+      user_id: headers?.user_id,
+      server_id: headers?.server_id,
+      update_config_url: headers?.update_config_url,
+      access_token: headers?.access_token ? '***MASKED***' : 'NOT_PROVIDED'
+    });
+
     let client
     try {
       const clientId = headers?.twitter_client_id
@@ -309,41 +320,50 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const serverId = headers?.server_id
       const updateConfigUrl = headers?.update_config_url
 
-      let accessToken = headers?.access_token
-
-      const cacheKey = `${userId}:${serverId}`;
-
-      const cachedToken = tokenCache[cacheKey];
-
-      const now = Date.now();
-
-
-      if (cachedToken && cachedToken.expires_at > now) {
-        accessToken = cachedToken.access_token;
-      }else {
-        const refreshedToken = await OAuth2Helper.refreshToken(
-            {
-              clientId,
-              clientSecret,
-              redirectUri: '' // Not needed for refresh
-            },
-            refreshToken,
-            userId,
-            serverId,
-            updateConfigUrl
-        );
-        accessToken = refreshedToken?.access_token
-        tokenCache[cacheKey] = {
-          access_token: refreshedToken?.access_token,
-          expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
-          refresh_token: refreshedToken?.refresh_token,
-        };
+      // Validate required authentication parameters
+      if (!clientId) {
+        throw new Error('Missing required header: twitter_client_id');
+      }
+      if (!clientSecret) {
+        throw new Error('Missing required header: twitter_client_secret');
+      }
+      if (!refreshToken) {
+        throw new Error('Missing required header: twitter_refresh_token');
       }
 
+      let accessToken = headers?.access_token
 
-      // const accessToken = headers?.twitter_access_token
+      // const cacheKey = `${userId}:${serverId}`;
+      //
+      // const cachedToken = tokenCache[cacheKey];
+      //
+      // const now = Date.now();
 
 
+      // if (cachedToken && cachedToken.expires_at > now) {
+      //   accessToken = cachedToken.access_token;
+      // }else {
+      const refreshedToken = await OAuth2Helper.refreshToken(
+          {
+            clientId,
+            clientSecret,
+            redirectUri: '' // Not needed for refresh
+          },
+          refreshToken,
+          userId,
+          serverId,
+          updateConfigUrl
+      );
+      accessToken = refreshedToken?.access_token
+      // tokenCache[cacheKey] = {
+      //   access_token: refreshedToken?.access_token,
+      //   expires_at: now + (refreshedToken?.expires_in || ONE_HOUR_MS) * 1000,
+      //   refresh_token: refreshedToken?.refresh_token,
+      // };
+      // }
+
+
+      console.error('[Tweet Handler Debug] Creating Twitter client...');
       const config: Config = {
         authType: 'oauth2',
         clientId,
@@ -351,26 +371,39 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         accessToken,
       }
       client = new TwitterClient(config)
+      console.error('[Tweet Handler Debug] Twitter client created successfully');
     }catch (error: any) {
+      console.error('[Tweet Handler Debug] Error in authentication flow:', {
+        message: error.message,
+        stack: error.stack
+      });
       throw new McpError(
           401,
           `auth failed with error: ${error.message}`
       );
     }
 
+    console.error('[Tweet Handler Debug] Validating tweet parameters...');
     const result = PostTweetSchema.safeParse(args);
     if (!result.success) {
+      console.error('[Tweet Handler Debug] Parameter validation failed:', result.error.message);
       throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${result.error.message}`
+          ErrorCode.InvalidParams,
+          `Invalid parameters: ${result.error.message}`
       );
     }
 
+    console.error('[Tweet Handler Debug] Parameters validated, posting tweet...');
     const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+    console.error('[Tweet Handler Debug] Tweet posted successfully:', {
+      id: tweet.id,
+      authorUsername: tweet.authorUsername
+    });
+
     return {
       content: [{
         type: 'text',
-        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
+        text: `Tweet posted successfully!\nURL: https://twitter.com/${tweet.authorUsername}/status/${tweet.id}`
       }] as TextContent[]
     };
   }
@@ -402,8 +435,8 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
     console.error('Unexpected error:', error);
     throw new McpError(
-      ErrorCode.InternalError,
-      'An unexpected error occurred'
+        ErrorCode.InternalError,
+        'An unexpected error occurred'
     );
   }
 
@@ -414,7 +447,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     }
     const transport = new StreamableHTTPServerTransport(options);
     await this.server.connect(transport);
-    
+
     // Create HTTP server to handle requests
     const httpServer = http.createServer((req, res) => {
       if (req.method === 'POST' && req.url === '/mcp') {
@@ -428,13 +461,13 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-            
+
             if (req.method === 'OPTIONS') {
               res.writeHead(200);
               res.end();
               return;
             }
-            
+
             await transport.handleRequest(req, res, JSON.parse(body));
           } catch (error) {
             console.error('HTTP request error:', error);
@@ -453,7 +486,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         res.end('Not Found');
       }
     });
-    
+
     httpServer.listen(port, () => {
       console.error(`Twitter MCP server running on HTTP port ${port}`);
     });

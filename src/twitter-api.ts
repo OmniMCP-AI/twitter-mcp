@@ -76,9 +76,39 @@ export class TwitterClient {
   //   }
   // }
 
-  async postTweet(text: string, replyToTweetId?: string): Promise<PostedTweet> {
+  async getCurrentUser(): Promise<TwitterUser> {
     try {
-      // await this.ensureValidToken();
+      console.error('[Twitter API Debug] Getting current user...');
+      const endpoint = 'users/me';
+      await this.checkRateLimit(endpoint);
+
+      console.error('[Twitter API Debug] Making Twitter API call for current user...');
+      const response = await this.client.v2.me({
+        'user.fields': ['username', 'name', 'verified']
+      });
+
+      console.error('[Twitter API Debug] Current user API response:', {
+        id: response.data.id,
+        username: response.data.username,
+        name: response.data.name
+      });
+
+      return {
+        id: response.data.id,
+        username: response.data.username
+      };
+    } catch (error) {
+      console.error('[Twitter API Debug] Error getting current user:', error);
+      this.handleApiError(error);
+    }
+  }
+
+  async postTweet(text: string, replyToTweetId?: string): Promise<PostedTweet & { authorUsername: string }> {
+    try {
+      console.error('[Twitter API Debug] Starting postTweet...');
+      console.error('[Twitter API Debug] Tweet text:', text);
+      console.error('[Twitter API Debug] Reply to tweet ID:', replyToTweetId);
+
       const endpoint = 'tweets/create';
       await this.checkRateLimit(endpoint);
 
@@ -87,19 +117,30 @@ export class TwitterClient {
         tweetOptions.reply = { in_reply_to_tweet_id: replyToTweetId };
       }
 
-      console.log(`Posting tweet: ${tweetOptions}`);
+      console.error('[Twitter API Debug] Tweet options:', tweetOptions);
+      console.error('[Twitter API Debug] Making Twitter API call...');
 
       const response = await this.client.v2.tweet(tweetOptions);
-      
+
+
       console.error(`Tweet posted successfully with ID: ${response.data.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
-      
+
+      // Get current user to include username in response
+      console.error('[Twitter API Debug] Getting current user info...');
+      const user = await this.getCurrentUser();
+      console.error('[Twitter API Debug] Current user:', user);
+
       return {
         id: response.data.id,
-        text: response.data.text
+        text: response.data.text,
+        authorUsername: user.username
       };
     } catch (error) {
-      console.log(error);
-      this.handleApiError(error);
+
+      throw error;
+      // console.log("Posting tweet", error);
+      // this.handleApiError(error);
+
     }
   }
 
@@ -150,9 +191,9 @@ export class TwitterClient {
       const timeSinceLastRequest = Date.now() - lastRequest;
       if (timeSinceLastRequest < 1000) { // Basic rate limiting
         throw new TwitterError(
-          'Rate limit exceeded',
-          'rate_limit_exceeded',
-          429
+            'Rate limit exceeded',
+            'rate_limit_exceeded',
+            429
         );
       }
     }
@@ -160,26 +201,53 @@ export class TwitterClient {
   }
 
   private handleApiError(error: unknown): never {
+    console.error('[Twitter API Debug] Handling API error:', error);
+
     if (error instanceof TwitterError) {
+      console.error('[Twitter API Debug] TwitterError details:', {
+        message: error.message,
+        code: error.code,
+        status: error.status
+      });
       throw error;
     }
 
     // Handle twitter-api-v2 errors
     const apiError = error as any;
+    console.error('[Twitter API Debug] Raw API error:', {
+      message: apiError.message,
+      code: apiError.code,
+      status: apiError.status,
+      response: apiError.response,
+      data: apiError.data,
+      errors: apiError.errors,
+      stack: apiError.stack
+    });
+
     if (apiError.code) {
       throw new TwitterError(
-        apiError.message || 'Twitter API error',
-        apiError.code,
-        apiError.status
+          apiError.message || 'Twitter API error',
+          apiError.code,
+          apiError.status
+      );
+    }
+
+    // Handle fetch errors or other network errors
+    if (apiError.name === 'TypeError' && apiError.message.includes('fetch')) {
+      console.error('[Twitter API Debug] Network/fetch error detected');
+      throw new TwitterError(
+          `Network error: ${apiError.message}`,
+          'network_error',
+          500
       );
     }
 
     // Handle unexpected errors
-    console.error('Unexpected error in Twitter client:', error);
+    console.error('[Twitter API Debug] Unexpected error in Twitter client:', error);
     throw new TwitterError(
-      'An unexpected error occurred',
-      'internal_error',
-      500
+        `An unexpected error occurred: ${apiError.message || 'Unknown error'}`,
+        'internal_error',
+        500
     );
   }
 }
