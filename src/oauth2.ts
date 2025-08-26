@@ -150,11 +150,18 @@ export class OAuth2Helper {
     }
 
 
-    await Promise.all([
-      update_config_prod(userId, serverId, result.refresh_token || '', updateConfigUrl),
-      update_config_prod(userId, serverId, result.refresh_token || '', extraUpdateConfig)
+    const dev_url = process.env.DEV_OMNIMCP_BE_URL || '';
+    const prod_url = process.env.PROD_OMNIMCP_BE_URL || '';
 
-    ])
+    try {
+      await Promise.all([
+        update_config_prod(userId, serverId, result.refresh_token, dev_url || updateConfigUrl),
+        update_config_prod(userId, serverId, result.refresh_token, prod_url || extraUpdateConfig)
+      ]);
+      console.error('[OAuth2 Debug] Config updated successfully');
+    } catch (configError: any) {
+      console.error('[OAuth2 Debug] Warning: Failed to update config:', configError.message);
+    }
 
     return result
   }
