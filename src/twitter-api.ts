@@ -76,7 +76,7 @@ export class TwitterClient {
   //   }
   // }
 
-  async postTweet(text: string, replyToTweetId?: string, mediaIds?: string[],): Promise<PostedTweet> {
+  async postTweet(text: string, replyToTweetId?: string): Promise<PostedTweet> {
     try {
       // await this.ensureValidToken();
       const endpoint = 'tweets/create';
@@ -85,10 +85,6 @@ export class TwitterClient {
       const tweetOptions: any = { text };
       if (replyToTweetId) {
         tweetOptions.reply = { in_reply_to_tweet_id: replyToTweetId };
-      }
-
-      if (mediaIds) {
-        tweetOptions.media = { media_ids: mediaIds };
       }
 
       console.log(`Posting tweet: ${tweetOptions}`);
