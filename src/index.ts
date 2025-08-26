@@ -319,8 +319,10 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
 
       if (cachedToken && cachedToken.expires_at > now) {
+        console.log(`Using cached token********* ${userId}`)
         accessToken = cachedToken.access_token;
       }else {
+        console.log(`Refreshing token********* ${userId}`)
         const refreshedToken = await OAuth2Helper.refreshToken(
             {
               clientId,
