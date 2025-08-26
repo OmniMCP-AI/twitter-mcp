@@ -309,11 +309,18 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const serverId = headers?.server_id
       const updateConfigUrl = headers?.update_config_url
 
+      console.log("Headers*********", headers)
+
       let accessToken = headers?.access_token
 
       const cacheKey = `${userId}:${serverId}`;
 
+
+      console.log("cacheKey*********", cacheKey)
+
       const cachedToken = tokenCache[cacheKey];
+
+      console.log("cachedToken*********", cachedToken)
 
       const now = Date.now();
 
