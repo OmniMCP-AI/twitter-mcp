@@ -34,7 +34,9 @@ export const PostTweetSchema = z.object({
     text: z.string()
         .min(1, 'Tweet text cannot be empty')
         .max(280, 'Tweet cannot exceed 280 characters'),
-    reply_to_tweet_id: z.string().optional()
+    reply_to_tweet_id: z.string().optional(),
+    images: z.array(z.string()).optional(),
+    videos: z.array(z.string()).optional()
 });
 
 export const SearchTweetsSchema = z.object({

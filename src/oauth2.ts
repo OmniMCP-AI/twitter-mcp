@@ -142,19 +142,19 @@ export class OAuth2Helper {
 
     console.error('Refresh token:', result);
 
-    let extraUpdateConfig = updateConfigUrl
-    if (extraUpdateConfig.includes("omnimcp-be-dev")){
-      extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be-dev", "omnimcp-be");
-    }else {
-      extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be", "omnimcp-be-dev");
-    }
+    // let extraUpdateConfig = updateConfigUrl
+    // if (extraUpdateConfig.includes("omnimcp-be-dev")){
+    //   extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be-dev", "omnimcp-be");
+    // }else {
+    //   extraUpdateConfig = extraUpdateConfig.replace("omnimcp-be", "omnimcp-be-dev");
+    // }
 
 
-    await Promise.all([
-      update_config_prod(userId, serverId, result.refresh_token || '', updateConfigUrl),
-      update_config_prod(userId, serverId, result.refresh_token || '', extraUpdateConfig)
+    // await Promise.all([
+    //   update_config_prod(userId, serverId, result.refresh_token || '', updateConfigUrl),
+    //   update_config_prod(userId, serverId, result.refresh_token || '', extraUpdateConfig)
 
-    ])
+    // ])
 
     return result
   }

@@ -3,6 +3,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport, StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import http from 'http';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
@@ -357,7 +360,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         authType: 'oauth2',
         clientId,
         clientSecret,
-        accessToken,
+        accessToken
       }
       client = new TwitterClient(config)
     }catch (error: any) {
@@ -375,13 +378,95 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       );
     }
 
-    const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+    const [imageIds, videoIds] = await Promise.all([
+      this.handleUploadImages(client as any, result.data.images),
+      this.handleUploadVideos(client as any, result.data.videos)
+    ])
+
+    const mediaIds = [...imageIds, ...videoIds]
+
+    // const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
     return {
       content: [{
         type: 'text',
-        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
+        text: `${mediaIds.join(', ')}`
+        // text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
       }] as TextContent[]
     };
+  }
+
+  private async handleUploadImages(client: TwitterClient, images?: string[]) {
+    if (!images || images.length === 0) {
+      return [];
+    }
+
+    const mediaIds: string[] = [];
+    
+    // Twitter allows max 4 images
+    for (const imageBytes of images.slice(0, 4)) {
+      try {
+        
+        // Create temporary file
+        const tempDir = os.tmpdir();
+        const tempFileName = `twitter_media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+        
+        // Convert base64 string to Buffer and write to temp file
+        const base64Image = imageBytes.replace(/^data:image\/\w+;base64,/, "");
+        const imageBuffer = Buffer.from(base64Image, 'base64');
+        fs.writeFileSync(tempFilePath, imageBuffer);
+        
+        // Verify file was created and is accessible
+        if (!fs.existsSync(tempFilePath)) {
+          throw new Error('Failed to create temp file');
+        }
+        
+        const fileStats = fs.statSync(tempFilePath);
+        console.log(`Temp file created successfully: ${tempFilePath}, size: ${fileStats.size} bytes`);
+        
+        try {
+          // Upload media to Twitter using the TwitterClient
+          if (client && client.uploadMedia) {
+            console.log("Uploading media to Twitter", client)
+            const uploadedMediaIds = await client.uploadMedia([tempFilePath]);
+            if (uploadedMediaIds && uploadedMediaIds.length > 0) {
+              uploadedMediaIds.forEach(mediaId => {
+                if (mediaId) {
+                  mediaIds.push(mediaId);
+                }
+              });
+            }
+          } else {
+            console.error('TwitterClient not available or missing uploadMedia method');
+          }
+        } finally {
+          // Clean up temp file
+          try {
+            if (fs.existsSync(tempFilePath)) {
+              fs.unlinkSync(tempFilePath);
+              console.log(`Temp file cleaned up: ${tempFilePath}`);
+            }
+          } catch (cleanupError) {
+            console.error(`Failed to cleanup temp file: ${tempFilePath}`, cleanupError);
+          }
+        }
+      } catch (error) {
+        console.error("Error uploading image media:", error);
+        continue;
+      }
+    }
+    
+    return mediaIds;
+  }
+
+  private async handleUploadVideos(client: TwitterClient, videos?: string[]) {
+    if (!videos || videos.length === 0) {
+      return [];
+    }
+
+    // TODO: Implement video upload functionality
+    console.log('Video upload not yet implemented');
+    return [];
   }
 
   private handleError(error: unknown) {
