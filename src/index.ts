@@ -364,6 +364,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         `Invalid parameters: ${result.error.message}`
       );
     }
+    const tweetIds: string[] = []
     let tweetId = ''
     for (const tweet of result.data.tweets) {
       const tweetResult = PostTweetSchema.safeParse(tweet);
@@ -377,14 +378,16 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         tweetResult.data.reply_to_tweet_id = tweetId
       }
       tweetId = await this.handleOncePostTweet(tweetResult.data, headers)
+      tweetIds.push(tweetId)
     }
 
     console.log("Tweet posted successfully!********", tweetId)
 
+    const urls = tweetIds.map(id => `https://twitter.com/status/${id}`)
     return {
       content: [{
         type: 'text',
-        text: `Tweet thread posted successfully!\nURL: https://twitter.com/status/${tweetId}`
+        text: `Tweet thread posted successfully!\nURL: ${urls.join('\n')}`
       }] as TextContent[]
     };
   }
@@ -468,6 +471,13 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
     const mediaIds = await this.handleUploadMedia(client, result.data.images, result.data.videos)
 
+    if (((result.data.images && result.data.images.length > 0) || (result.data.videos && result.data.videos.length > 0)) && mediaIds.length == 0) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: Invalid media`
+      );
+    }
+
     let tweetId = '';
     try {
       const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
@@ -489,7 +499,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         // Twitter 最多允许4张图片
         for (let image of images.slice(0, 4)) {
           try {
-            const mediaId = await this.uploadBase64Image(client, image);
+            const mediaId = await this.uploadMedia(client, image, 'image');
             if (mediaId) {
               mediaIds.push(mediaId);
             }
@@ -503,9 +513,9 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       // 处理视频上传
       if (videos && videos.length > 0) {
         // Twitter 最多允许1个视频
-        for (const base64Video of videos.slice(0, 1)) {
+        for (const video of videos.slice(0, 1)) {
           try {
-            const mediaId = await this.uploadBase64Video(client, base64Video);
+            const mediaId = await this.uploadMedia(client, video, 'video');
             if (mediaId) {
               mediaIds.push(mediaId);
             }
@@ -523,69 +533,32 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     }
   }
 
-  private async uploadBase64Image(client: TwitterClient, image: string): Promise<string | null> {
+  private async uploadMedia (client: TwitterClient, media: string, type: 'image' | 'video') {
     try {
       let extractedMimeType = ''
       let imageBuffer = null
-      if (image.startsWith('http')) {
-        const response = await fetch(image)
+      if (media.startsWith('http')) {
+        const response = await fetch(media)
         const buffer = await response.arrayBuffer()
         imageBuffer = Buffer.from(buffer)
-        extractedMimeType = response.headers.get('content-type') || 'image/jpeg'
+        extractedMimeType = response.headers.get('content-type') || (type == 'image' ? 'image/jpeg' : 'video/mp4')
       } else {
-        // 提取 MIME type 和 base64 数据
-        const match = image.match(/^data:(image\/\w+);base64,(.+)$/)
-        if (!match) throw new Error('Base64 image format error, must contain MIME type prefix')
+        const match = type == 'image' ?  media.match(/^data:(image\/\w+);base64,(.+)$/) : media.match(/^data:(video\/\w+);base64,(.+)$/)
+        if (!match) throw new Error('Invalid Media')
     
-        extractedMimeType = match[1]  // 例如 'image/jpeg'
+        extractedMimeType = match[1]
         const base64Data = match[2]
         imageBuffer = Buffer.from(base64Data, 'base64')
       }
 
       if (!imageBuffer) {
-        throw new Error('Invalid image')
+        throw new Error('Invalid Media')
       }
-  
-      // 上传图片到 Twitter
+
       const mediaId = await client.uploadMedia(imageBuffer, extractedMimeType as EUploadMimeType)
       return mediaId;
     } catch (error: any) {
-      console.error('上传 Twitter 图片失败:', error)
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${error.message}`
-      );
-    }
-  }
-
-  private async uploadBase64Video(client: TwitterClient, video: string): Promise<string | null> {
-    try {
-      let extractedMimeType = ''
-      let videoBuffer = null
-      if (video.startsWith('http')) {
-        const response = await fetch(video)
-        const buffer = await response.arrayBuffer()
-        videoBuffer = Buffer.from(buffer)
-        extractedMimeType = response.headers.get('content-type') || 'video/mp4'
-      } else {
-      // 提取 MIME type 和 base64 数据
-        const match = video.match(/^data:(video\/\w+);base64,(.+)$/)
-        if (!match) throw new Error('Base64 video format error, must contain MIME type prefix')
-
-        extractedMimeType = match[1]  // 例如 'video/mp4'
-        const base64Data = match[2]
-        videoBuffer = Buffer.from(base64Data, 'base64')
-      }
-
-      if (!videoBuffer) {
-        throw new Error('Invalid video')
-      }
-
-      // 上传视频到 Twitter
-      const mediaId = await client.uploadMedia(videoBuffer, extractedMimeType as EUploadMimeType)
-      return mediaId;
-    } catch (error: any) {
-      console.error('上传 Twitter 视频失败:', error)
+      console.error('上传 Twitter Media 失败:', error)
       throw new McpError(
         ErrorCode.InvalidParams,
         `Invalid parameters: ${error.message}`
