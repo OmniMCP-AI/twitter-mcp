@@ -14,12 +14,14 @@ import {
   McpError,
   TextContent
 } from '@modelcontextprotocol/sdk/types.js';
+import { EUploadMimeType } from 'twitter-api-v2';
 import { TwitterClient } from './twitter-api.js';
 import { ResponseFormatter } from './formatter.js';
 import { OAuth2Helper } from './oauth2.js';
 import {
   Config, ConfigSchema,
   PostTweetSchema, SearchTweetsSchema,
+  PostTweetThreadSchema,
   TwitterError
 } from './types.js';
 import dotenv from 'dotenv';
@@ -150,9 +152,62 @@ export class TwitterServer {
               reply_to_tweet_id: {
                 type: 'string',
                 description: 'Optional: ID of the tweet to reply to'
+              },
+              images: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                  description: 'The base64 encoded image or http url'
+                }
+              },
+              videos: {
+                type: 'array',
+                items: {
+                  type: 'string',
+                  description: 'The base64 encoded video or http url'
+                }
               }
             },
             required: ['text']
+          }
+        } as Tool,
+        {
+          name: 'post_tweet_thread',
+          description: 'Publish multiple related tweets on Twitter at once, forming an organized tweet thread',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              tweets: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    text: {
+                      type: 'string',
+                      description: 'The content of your tweet',
+                      maxLength: 280
+                    },
+                    images: {
+                      type: 'array',
+                      items: {
+                        type: 'string',
+                        description: 'The base64 encoded image'
+                      },
+                      optional: true
+                    },
+                    videos: {
+                      type: 'array',
+                      items: {
+                        type: 'string',
+                        description: 'The base64 encoded video'
+                      },
+                      optional: true
+                    }
+                  }
+                }
+              }
+            },
+            required: ['tweets']
           }
         } as Tool
         // {
@@ -190,6 +245,8 @@ export class TwitterServer {
         switch (name) {
           case 'post_tweet':
             return await this.handlePostTweet(args, headers);
+          case 'post_tweet_thread':
+            return await this.handlePostTweetThread(args, headers);
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -302,7 +359,50 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     };
   }
 
+  private async handlePostTweetThread(args: unknown, headers?: any) {
+    const result = PostTweetThreadSchema.safeParse(args);
+    if (!result.success) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${result.error.message}`
+      );
+    }
+    let tweetId = ''
+    for (const tweet of result.data.tweets) {
+      const tweetResult = PostTweetSchema.safeParse(tweet);
+      if (!tweetResult.success) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Invalid parameters: ${tweetResult.error.message}`
+        );
+      }
+      if (tweetId && tweetId.length > 0) {
+        tweetResult.data.reply_to_tweet_id = tweetId
+      }
+      tweetId = await this.handleOncePostTweet(tweetResult.data, headers)
+    }
+
+    console.log("Tweet posted successfully!********", tweetId)
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Tweet thread posted successfully!\nURL: https://twitter.com/status/${tweetId}`
+      }] as TextContent[]
+    };
+  }
+
   private async handlePostTweet(args: unknown, headers?: any) {
+    const tweetId = await this.handleOncePostTweet(args, headers)
+    return {
+      content: [{
+        type: 'text',
+        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweetId}`
+      }] as TextContent[]
+    };
+  }
+
+  private async handleOncePostTweet(args: unknown, headers?: any) {
     let client
     try {
       const clientId = headers?.twitter_client_id
@@ -312,27 +412,18 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const serverId = headers?.server_id
       const updateConfigUrl = headers?.update_config_url
 
-      console.log("Headers*********", headers)
-
       let accessToken = headers?.access_token
 
       const cacheKey = `${userId}:${serverId}`;
 
-
-      console.log("cacheKey*********", cacheKey)
-
       const cachedToken = tokenCache[cacheKey];
-
-      console.log("cachedToken*********", cachedToken)
 
       const now = Date.now();
 
 
       if (cachedToken && cachedToken.expires_at > now) {
-        console.log(`Using cached token********* ${userId}`)
         accessToken = cachedToken.access_token;
       }else {
-        console.log(`Refreshing token********* ${userId}`)
         const refreshedToken = await OAuth2Helper.refreshToken(
             {
               clientId,
@@ -378,95 +469,131 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       );
     }
 
+    const mediaIds = await this.handleUploadMedia(client, result.data.images, result.data.videos)
+
     let tweetId = '';
     try {
-      const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+      const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
       tweetId = tweet.id;
       console.log("Tweet posted successfully!********")
     } catch (error) {
-      
       console.log("ERROR********", error)
     }
-    return {
-      content: [{
-        type: 'text',
-        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweetId}`
-      }] as TextContent[]
-    };
+
+    return tweetId
   }
 
-  private async handleUploadImages(client: TwitterClient, images?: string[]) {
-    if (!images || images.length === 0) {
-      return [];
-    }
-
+  private async handleUploadMedia (client: TwitterClient, images?: string[], videos?: string[]) {
     const mediaIds: string[] = [];
     
-    // Twitter allows max 4 images
-    for (const imageBytes of images.slice(0, 4)) {
-      try {
-        
-        // Create temporary file
-        const tempDir = os.tmpdir();
-        const tempFileName = `twitter_media_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-        const tempFilePath = path.join(tempDir, tempFileName);
-        
-        // Convert base64 string to Buffer and write to temp file
-        const base64Image = imageBytes.replace(/^data:image\/\w+;base64,/, "");
-        const imageBuffer = Buffer.from(base64Image, 'base64');
-        fs.writeFileSync(tempFilePath, imageBuffer);
-        
-        // Verify file was created and is accessible
-        if (!fs.existsSync(tempFilePath)) {
-          throw new Error('Failed to create temp file');
-        }
-        
-        const fileStats = fs.statSync(tempFilePath);
-        console.log(`Temp file created successfully: ${tempFilePath}, size: ${fileStats.size} bytes`);
-        
-        try {
-          // Upload media to Twitter using the TwitterClient
-          if (client && client.uploadMedia) {
-            console.log("Uploading media to Twitter", client)
-            const uploadedMediaIds = await client.uploadMedia([tempFilePath]);
-            if (uploadedMediaIds && uploadedMediaIds.length > 0) {
-              uploadedMediaIds.forEach(mediaId => {
-                if (mediaId) {
-                  mediaIds.push(mediaId);
-                }
-              });
-            }
-          } else {
-            console.error('TwitterClient not available or missing uploadMedia method');
-          }
-        } finally {
-          // Clean up temp file
+    try {
+      // 处理图片上传
+      if (images && images.length > 0) {
+        // Twitter 最多允许4张图片
+        for (let image of images.slice(0, 4)) {
           try {
-            if (fs.existsSync(tempFilePath)) {
-              fs.unlinkSync(tempFilePath);
-              console.log(`Temp file cleaned up: ${tempFilePath}`);
+            const mediaId = await this.uploadBase64Image(client, image);
+            if (mediaId) {
+              mediaIds.push(mediaId);
             }
-          } catch (cleanupError) {
-            console.error(`Failed to cleanup temp file: ${tempFilePath}`, cleanupError);
+          } catch (error) {
+            console.error('图片上传失败:', error);
+            continue; // 继续处理下一张图片
           }
         }
-      } catch (error) {
-        console.error("Error uploading image media:", error);
-        continue;
       }
+      
+      // 处理视频上传
+      if (videos && videos.length > 0) {
+        // Twitter 最多允许1个视频
+        for (const base64Video of videos.slice(0, 1)) {
+          try {
+            const mediaId = await this.uploadBase64Video(client, base64Video);
+            if (mediaId) {
+              mediaIds.push(mediaId);
+            }
+          } catch (error) {
+            console.error('视频上传失败:', error);
+            continue; // 继续处理下一个视频
+          }
+        }
+      }
+      
+      return mediaIds;
+    } catch (error) {
+      console.error('媒体上传过程中发生错误:', error);
+      return mediaIds; // 返回已成功上传的媒体ID
     }
-    
-    return mediaIds;
   }
 
-  private async handleUploadVideos(client: TwitterClient, videos?: string[]) {
-    if (!videos || videos.length === 0) {
-      return [];
-    }
+  private async uploadBase64Image(client: TwitterClient, image: string): Promise<string | null> {
+    try {
+      let extractedMimeType = ''
+      let imageBuffer = null
+      if (image.startsWith('http')) {
+        const response = await fetch(image)
+        const buffer = await response.arrayBuffer()
+        imageBuffer = Buffer.from(buffer)
+        extractedMimeType = response.headers.get('content-type') || 'image/jpeg'
+      } else {
+        // 提取 MIME type 和 base64 数据
+        const match = image.match(/^data:(image\/\w+);base64,(.+)$/)
+        if (!match) throw new Error('Base64 image format error, must contain MIME type prefix')
+    
+        extractedMimeType = match[1]  // 例如 'image/jpeg'
+        const base64Data = match[2]
+        imageBuffer = Buffer.from(base64Data, 'base64')
+      }
 
-    // TODO: Implement video upload functionality
-    console.log('Video upload not yet implemented');
-    return [];
+      if (!imageBuffer) {
+        throw new Error('Invalid image')
+      }
+  
+      // 上传图片到 Twitter
+      const mediaId = await client.uploadMedia(imageBuffer, extractedMimeType as EUploadMimeType)
+      return mediaId;
+    } catch (error: any) {
+      console.error('上传 Twitter 图片失败:', error)
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.message}`
+      );
+    }
+  }
+
+  private async uploadBase64Video(client: TwitterClient, video: string): Promise<string | null> {
+    try {
+      let extractedMimeType = ''
+      let videoBuffer = null
+      if (video.startsWith('http')) {
+        const response = await fetch(video)
+        const buffer = await response.arrayBuffer()
+        videoBuffer = Buffer.from(buffer)
+        extractedMimeType = response.headers.get('content-type') || 'video/mp4'
+      } else {
+      // 提取 MIME type 和 base64 数据
+        const match = video.match(/^data:(video\/\w+);base64,(.+)$/)
+        if (!match) throw new Error('Base64 video format error, must contain MIME type prefix')
+
+        extractedMimeType = match[1]  // 例如 'video/mp4'
+        const base64Data = match[2]
+        videoBuffer = Buffer.from(base64Data, 'base64')
+      }
+
+      if (!videoBuffer) {
+        throw new Error('Invalid video')
+      }
+
+      // 上传视频到 Twitter
+      const mediaId = await client.uploadMedia(videoBuffer, extractedMimeType as EUploadMimeType)
+      return mediaId;
+    } catch (error: any) {
+      console.error('上传 Twitter 视频失败:', error)
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.message}`
+      );
+    }
   }
 
   private handleError(error: unknown) {

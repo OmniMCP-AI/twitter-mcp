@@ -39,6 +39,10 @@ export const PostTweetSchema = z.object({
     videos: z.array(z.string()).optional()
 });
 
+export const PostTweetThreadSchema = z.object({
+    tweets: z.array(PostTweetSchema)
+});
+
 export const SearchTweetsSchema = z.object({
     query: z.string().min(1, 'Search query cannot be empty'),
     count: z.number()
