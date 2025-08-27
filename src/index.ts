@@ -3,9 +3,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport, StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import http from 'http';
-import os from 'os';
-import path from 'path';
-import fs from 'fs';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
