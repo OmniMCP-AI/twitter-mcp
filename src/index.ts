@@ -378,19 +378,19 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       );
     }
 
-    const [imageIds, videoIds] = await Promise.all([
-      this.handleUploadImages(client as any, result.data.images),
-      this.handleUploadVideos(client as any, result.data.videos)
-    ])
-
-    const mediaIds = [...imageIds, ...videoIds]
-
-    // const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
+    let tweetId = '';
+    try {
+      const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id);
+      tweetId = tweet.id;
+      console.log("Tweet posted successfully!********")
+    } catch (error) {
+      
+      console.log("ERROR********", error)
+    }
     return {
       content: [{
         type: 'text',
-        text: `${mediaIds.join(', ')}`
-        // text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweet.id}`
+        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweetId}`
       }] as TextContent[]
     };
   }
