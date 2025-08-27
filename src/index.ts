@@ -154,14 +154,14 @@ export class TwitterServer {
                 type: 'array',
                 items: {
                   type: 'string',
-                  description: 'The base64 encoded image or http url'
+                  description: 'Optional: The base64 encoded image or http url'
                 }
               },
               videos: {
                 type: 'array',
                 items: {
                   type: 'string',
-                  description: 'The base64 encoded video or http url'
+                  description: 'Optional: The base64 encoded video or http url'
                 }
               }
             },
@@ -188,7 +188,7 @@ export class TwitterServer {
                       type: 'array',
                       items: {
                         type: 'string',
-                        description: 'The base64 encoded image'
+                        description: 'Optional: The base64 encoded image or http url'
                       },
                       optional: true
                     },
@@ -196,7 +196,7 @@ export class TwitterServer {
                       type: 'array',
                       items: {
                         type: 'string',
-                        description: 'The base64 encoded video'
+                        description: 'Optional: The base64 encoded video or http url'
                       },
                       optional: true
                     }
