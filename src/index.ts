@@ -152,6 +152,7 @@ export class TwitterServer {
               },
               images: {
                 type: 'array',
+                 description: 'Optional: This parameter is an array, and its elements can be either base64-encoded images or HTTP links.etc: ["https://pic.com/a.jpg"]',
                 items: {
                   type: 'string',
                   description: 'Optional: The base64 encoded image or http url'
@@ -159,6 +160,7 @@ export class TwitterServer {
               },
               videos: {
                 type: 'array',
+                description: 'Optional: This parameter is an array, and its elements can be either base64-encoded videos or HTTP links.etc: ["https://video.com/a.mp4"]',
                 items: {
                   type: 'string',
                   description: 'Optional: The base64 encoded video or http url'
@@ -186,6 +188,7 @@ export class TwitterServer {
                     },
                     images: {
                       type: 'array',
+                      description: 'Optional: This parameter is an array, and its elements can be either base64-encoded images or HTTP links.etc: ["https://pic.com/a.jpg"]',
                       items: {
                         type: 'string',
                         description: 'Optional: The base64 encoded image or http url'
@@ -194,6 +197,7 @@ export class TwitterServer {
                     },
                     videos: {
                       type: 'array',
+                      description: 'Optional: This parameter is an array, and its elements can be either base64-encoded videos or HTTP links.etc: ["https://video.com/a.mp4"]',
                       items: {
                         type: 'string',
                         description: 'Optional: The base64 encoded video or http url'
