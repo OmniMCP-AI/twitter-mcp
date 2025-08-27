@@ -1,6 +1,8 @@
-import { TwitterApi } from 'twitter-api-v2';
+import { TwitterApi, EUploadMimeType } from 'twitter-api-v2';
 import { Config, TwitterError, Tweet, TwitterUser, PostedTweet, LegacyConfig, OAuth2Config } from './types.js';
 import { OAuth2Helper } from './oauth2.js';
+import fs from 'fs';
+import path from 'path';
 
 export class TwitterClient {
   private client: TwitterApi;
@@ -76,7 +78,7 @@ export class TwitterClient {
   //   }
   // }
 
-  async postTweet(text: string, replyToTweetId?: string): Promise<PostedTweet> {
+  async postTweet(text: string, replyToTweetId?: string, mediaIds?: string[]): Promise<PostedTweet> {
     try {
       // await this.ensureValidToken();
       const endpoint = 'tweets/create';
@@ -85,6 +87,10 @@ export class TwitterClient {
       const tweetOptions: any = { text };
       if (replyToTweetId) {
         tweetOptions.reply = { in_reply_to_tweet_id: replyToTweetId };
+      }
+
+      if (mediaIds && mediaIds.length > 0) {
+        tweetOptions.media = { media_ids: mediaIds };
       }
 
       console.log(`Posting tweet: ${tweetOptions}`);
@@ -99,6 +105,28 @@ export class TwitterClient {
       };
     } catch (error) {
       console.log(error);
+      this.handleApiError(error);
+    }
+  }
+
+  /**
+   * Upload media (images and videos) to Twitter
+   * @param filePaths Array of media file paths
+   * @returns Array of media IDs
+   */
+  async uploadMedia(buffer: Buffer, mimeType: EUploadMimeType): Promise<string> {
+    try {
+      const endpoint = 'media/upload';
+      await this.checkRateLimit(endpoint);
+
+      console.log('uploadMedia *** ', mimeType)
+
+      const mediaId = await this.client.v2.uploadMedia(buffer, { 
+        media_type: mimeType 
+      })
+      return mediaId
+    } catch (error) {
+      console.error('Error in uploadMedia method:', error);
       this.handleApiError(error);
     }
   }
@@ -166,10 +194,59 @@ export class TwitterClient {
 
     // Handle twitter-api-v2 errors
     const apiError = error as any;
+    
+    // Log detailed error information
+    console.error('Twitter API Error Details:', {
+      message: apiError.message,
+      code: apiError.code,
+      status: apiError.status,
+      data: apiError.data,
+      stack: apiError.stack
+    });
+
     if (apiError.code) {
+      // Handle specific error codes
+      let errorMessage = apiError.message || 'Twitter API error';
+      let errorCode = apiError.code;
+      
+      switch (apiError.code) {
+        case 'INVALID_MEDIA':
+          errorMessage = 'Invalid media format or corrupted file';
+          break;
+        case 'MEDIA_TOO_LARGE':
+          errorMessage = 'Media file exceeds size limit';
+          break;
+        case 'RATE_LIMIT_EXCEEDED':
+          errorMessage = 'Rate limit exceeded, please wait before retrying';
+          break;
+        case 'UNAUTHORIZED':
+          errorMessage = 'Authentication failed, please check your credentials';
+          break;
+        case 'FORBIDDEN':
+          errorMessage = 'Access denied, insufficient permissions';
+          break;
+        case 'NOT_FOUND':
+          errorMessage = 'Resource not found';
+          break;
+        case 'REQUEST_TIMEOUT':
+          errorMessage = 'Request timeout, please try again';
+          break;
+        case 'NETWORK_ERROR':
+          errorMessage = 'Network connection error, please check your internet connection';
+          break;
+        default:
+          if (apiError.status === 429) {
+            errorMessage = 'Rate limit exceeded, please wait before retrying';
+            errorCode = 'rate_limit_exceeded';
+          } else if (apiError.status >= 500) {
+            errorMessage = 'Twitter service temporarily unavailable, please try again later';
+            errorCode = 'service_unavailable';
+          }
+      }
+      
       throw new TwitterError(
-        apiError.message || 'Twitter API error',
-        apiError.code,
+        errorMessage,
+        errorCode,
         apiError.status
       );
     }
@@ -177,7 +254,7 @@ export class TwitterClient {
     // Handle unexpected errors
     console.error('Unexpected error in Twitter client:', error);
     throw new TwitterError(
-      'An unexpected error occurred',
+      'An unexpected error occurred while communicating with Twitter API',
       'internal_error',
       500
     );
