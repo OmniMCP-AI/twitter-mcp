@@ -398,15 +398,19 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
   private async handlePostTweet(args: unknown, headers?: any) {
     const tweetId = await this.handleOncePostTweet(args, headers)
+    const client = await this.getUserClient(args, headers)
+    const user = await client.getCurrentUser()
+    
+    const url = `https://twitter.com/${user.username}/status/${tweetId}`
     return {
       content: [{
         type: 'text',
-        text: `Tweet posted successfully!\nURL: https://twitter.com/status/${tweetId}`
+        text: `Tweet posted successfully!\nURL: ${url}`
       }] as TextContent[]
     };
   }
 
-  private async handleOncePostTweet(args: unknown, headers?: any) {
+  private async getUserClient(args: unknown, headers?: any) {
     let client
     try {
       const clientId = headers?.twitter_client_id
@@ -458,12 +462,18 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         accessToken
       }
       client = new TwitterClient(config)
+      return client
     }catch (error: any) {
       throw new McpError(
           401,
           `auth failed with error: ${error.message}`
       );
     }
+  }
+
+  private async handleOncePostTweet(args: unknown, headers?: any) {
+    
+    const client = await this.getUserClient(args, headers)
 
     const result = PostTweetSchema.safeParse(args);
     if (!result.success) {

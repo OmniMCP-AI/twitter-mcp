@@ -78,6 +78,33 @@ export class TwitterClient {
   //   }
   // }
 
+  async getCurrentUser(): Promise<TwitterUser> {
+    try {
+      console.error('[Twitter API Debug] Getting current user...');
+      const endpoint = 'users/me';
+      await this.checkRateLimit(endpoint);
+  
+      console.error('[Twitter API Debug] Making Twitter API call for current user...');
+      const response = await this.client.v2.me({
+        'user.fields': ['username', 'name', 'verified']
+      });
+  
+      console.error('[Twitter API Debug] Current user API response:', {
+        id: response.data.id,
+        username: response.data.username,
+        name: response.data.name
+      });
+  
+      return {
+        id: response.data.id,
+        username: response.data.username
+      };
+    } catch (error) {
+      console.error('[Twitter API Debug] Error getting current user:', error);
+      this.handleApiError(error);
+    }
+  }
+
   async postTweet(text: string, replyToTweetId?: string, mediaIds?: string[]): Promise<PostedTweet> {
     try {
       // await this.ensureValidToken();
