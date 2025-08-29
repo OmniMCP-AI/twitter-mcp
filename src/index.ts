@@ -178,6 +178,7 @@ export class TwitterServer {
             properties: {
               tweets: {
                 type: 'array',
+                description: 'The array of tweets to be posted, each one must have a text field, other fields are optional, etc: [{text: "Hello", images: ["https://pic.com/a.jpg"], videos: ["https://video.com/a.mp4"]}]',
                 items: {
                   type: 'object',
                   properties: {
