@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { logger } from './logger.js';
 import { StreamableHTTPServerTransport, StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import http from 'http';
 import {
@@ -362,6 +362,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   private async handlePostTweetThread(args: unknown, headers?: any) {
+    logger.info(`${headers?.user_id} handlePostTweetThread args: ${JSON.stringify(args)}`)
     const result = PostTweetThreadSchema.safeParse(args);
     if (!result.success) {
       throw new McpError(
@@ -386,8 +387,6 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       tweetIds.push(tweetId)
     }
 
-    console.log("Tweet posted successfully!********", tweetId)
-
     const userClient = await this.getUserClient(args, headers)
     const user = await userClient.getCurrentUser()
     
@@ -402,6 +401,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   private async handlePostTweet(args: unknown, headers?: any) {
+    logger.info(`${headers?.user_id} handlePostTweet args: ${JSON.stringify(args)}`)
     const tweetId = await this.handleOncePostTweet(args, headers)
     const client = await this.getUserClient(args, headers)
     const user = await client.getCurrentUser()
@@ -426,6 +426,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const updateConfigUrl = headers?.update_config_url
 
       let accessToken = headers?.access_token
+      logger.info(`${headers?.user_id} handlePostTweet refreshToken: ${refreshToken}`)
 
       const cacheKey = `${userId}:${serverId}`;
 
@@ -435,8 +436,10 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
 
       if (cachedToken && cachedToken.expires_at > now) {
+        logger.info(`${headers?.user_id} handlePostTweet run cachedToken`)
         accessToken = cachedToken.access_token;
       }else {
+        logger.info(`${headers?.user_id} handlePostTweet run refreshedToken`)
         const refreshedToken = await OAuth2Helper.refreshToken(
             {
               clientId,
@@ -469,6 +472,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       client = new TwitterClient(config)
       return client
     }catch (error: any) {
+      logger.info(`${headers?.user_id} handlePostTweet error: ${error.message}`)
       throw new McpError(
           401,
           `auth failed with error: ${error.message}`

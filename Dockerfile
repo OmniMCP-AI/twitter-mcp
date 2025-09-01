@@ -23,6 +23,8 @@ FROM node:18-slim
 # Set the working directory in the runtime image
 WORKDIR /app
 
+RUN mkdir logs
+
 # Copy the build files from the builder image
 COPY --from=builder /app/build ./build
 
