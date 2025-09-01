@@ -426,7 +426,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const updateConfigUrl = headers?.update_config_url
 
       let accessToken = headers?.access_token
-      logger.info(`${headers?.user_id} handlePostTweet accessToken: ${accessToken}`)
+      logger.info(`${headers?.user_id} handlePostTweet refreshToken: ${refreshToken}`)
 
       const cacheKey = `${userId}:${serverId}`;
 
