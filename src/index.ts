@@ -144,7 +144,7 @@ export class TwitterServer {
               text: {
                 type: 'string',
                 description: 'The content of your tweet',
-                maxLength: 280
+                maxLength: 25000
               },
               reply_to_tweet_id: {
                 type: 'string',
@@ -185,7 +185,7 @@ export class TwitterServer {
                     text: {
                       type: 'string',
                       description: 'The content of your tweet',
-                      maxLength: 280
+                      maxLength: 25000
                     },
                     images: {
                       type: 'array',
