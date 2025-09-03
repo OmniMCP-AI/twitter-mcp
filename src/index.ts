@@ -507,9 +507,9 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     try {
       const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
       tweetId = tweet.id;
-      console.log("Tweet posted successfully!********")
+      logger.info(`${headers?.user_id} handlePostTweet tweetId: ${tweetId}`)
     } catch (error) {
-      console.log("ERROR********", error)
+      logger.info(`${headers?.user_id} handlePostTweet error: ${error.message}`)
     }
 
     return tweetId
