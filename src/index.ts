@@ -392,6 +392,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     
 
     const urls = tweetIds.map(id => `https://twitter.com/${user.username}/status/${id}`)
+    logger.info(`${headers?.user_id} handlePostTweet urls: ${urls.join('\n')}`)
     return {
       content: [{
         type: 'text',
@@ -407,6 +408,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     const user = await client.getCurrentUser()
     
     const url = `https://twitter.com/${user.username}/status/${tweetId}`
+    logger.info(`${headers?.user_id} handlePostTweet url: ${url}`)
     return {
       content: [{
         type: 'text',
