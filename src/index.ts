@@ -676,6 +676,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     
     // Create HTTP server to handle requests
     const httpServer = http.createServer((req, res) => {
+
       if (req.method === 'POST' && req.url === '/expired_token') {
         let body = '';
         req.on('data', chunk => {
@@ -718,6 +719,51 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
             res.end(JSON.stringify({ 
               error: 'Internal server error',
               message: 'Failed to clear token cache'
+            }));
+          }
+        });
+      } else if (req.method === 'POST' && req.url === '/get_token_cache') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            const requestData = JSON.parse(body);
+            const { user_id, server_id } = requestData;
+            
+            if (!user_id || !server_id) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                error: 'Bad Request',
+                message: 'user_id and server_id are required'
+              }));
+              return;
+            }
+            
+            // 获取用户 token 缓存状态
+            const cacheStatus = getUserTokenCacheStatus(user_id, server_id);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Token cache status retrieved successfully',
+              user_id,
+              server_id,
+              cache_key: `${user_id}:${server_id}`,
+              cache_status: cacheStatus
+            }));
+          } catch (error) {
+            console.error('Get token cache API error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+              error: 'Internal server error',
+              message: 'Failed to get token cache status'
             }));
           }
         });
