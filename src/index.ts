@@ -595,8 +595,8 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       }
       
       return mediaIds;
-    } catch (error) {
-      console.error('媒体上传过程中发生错误:', error);
+    } catch (error: any) {
+      logger.info(`$handleUploadMedia error: ${error.message} JSON: ${JSON.stringify(error)}`)
       return mediaIds; // 返回已成功上传的媒体ID
     }
   }
