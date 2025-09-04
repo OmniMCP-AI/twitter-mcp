@@ -135,13 +135,11 @@ export class OAuth2Helper {
 
     if (!response.ok) {
       const error = await response.json();
-      logger.error(`${userId} OAuth2 token refresh failed: ${error.error_description || error.error}`);
+      logger.info(`${userId} OAuth2 token refresh failed: ${error.error_description || error.error}`);
       throw new Error(`OAuth2 token refresh failed: ${error.error_description || error.error}`);
     }
 
     const result = await response.json();
-
-    console.error('Refresh token:', result);
 
     let extraUpdateConfig = updateConfigUrl
     if (extraUpdateConfig.includes("omnimcp-be-dev")){
@@ -159,11 +157,9 @@ export class OAuth2Helper {
         update_config_prod(userId, serverId, result.refresh_token, dev_url || updateConfigUrl),
         update_config_prod(userId, serverId, result.refresh_token, prod_url || extraUpdateConfig)
       ]);
-      console.error('[OAuth2 Debug] Config updated successfully');
-      logger.error(`${userId} OAuth2 token refresh success`);
+      logger.info(`${userId} OAuth2 token refresh success`);
     } catch (configError: any) {
-      console.error('[OAuth2 Debug] Warning: Failed to update config:', configError.message);
-      logger.error(`${userId} OAuth2 token refresh failed: ${configError.message}`);
+      logger.info(`${userId} OAuth2 token refresh failed: ${configError.message}`);
     }
 
     return result
