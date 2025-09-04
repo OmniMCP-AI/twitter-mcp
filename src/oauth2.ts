@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto';
 import axios from 'axios';
-
+import { logger } from './logger.js';
 
 export interface OAuth2Config {
   clientId: string;
@@ -135,6 +135,7 @@ export class OAuth2Helper {
 
     if (!response.ok) {
       const error = await response.json();
+      logger.error(`${userId} OAuth2 token refresh failed: ${error.error_description || error.error}`);
       throw new Error(`OAuth2 token refresh failed: ${error.error_description || error.error}`);
     }
 
@@ -159,8 +160,10 @@ export class OAuth2Helper {
         update_config_prod(userId, serverId, result.refresh_token, prod_url || extraUpdateConfig)
       ]);
       console.error('[OAuth2 Debug] Config updated successfully');
+      logger.error(`${userId} OAuth2 token refresh success`);
     } catch (configError: any) {
       console.error('[OAuth2 Debug] Warning: Failed to update config:', configError.message);
+      logger.error(`${userId} OAuth2 token refresh failed: ${configError.message}`);
     }
 
     return result
