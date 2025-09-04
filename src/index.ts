@@ -35,6 +35,49 @@ const tokenCache: Record<string, TokenCacheEntry> = {};
 
 const ONE_HOUR_MS = 60 * 60;
 
+// Token cache management functions
+function clearUserTokenCache(userId: string, serverId: string): boolean {
+  const cacheKey = `${userId}:${serverId}`;
+  const deleted = delete tokenCache[cacheKey];
+  logger.info(`Token cache cleared for user: ${userId}, server: ${serverId}, deleted: ${deleted}`);
+  return deleted;
+}
+
+function getUserTokenCacheStatus(userId: string, serverId: string): { exists: boolean; expires_at?: number; is_expired?: boolean } {
+  const cacheKey = `${userId}:${serverId}`;
+  const entry = tokenCache[cacheKey];
+  
+  if (!entry) {
+    return { exists: false };
+  }
+  
+  const now = Date.now();
+  const isExpired = entry.expires_at <= now;
+  
+  return {
+    exists: true,
+    expires_at: entry.expires_at,
+    is_expired: isExpired
+  };
+}
+
+function getAllTokenCacheStatus(): Record<string, { user_id: string; server_id: string; expires_at: number; is_expired: boolean }> {
+  const result: Record<string, { user_id: string; server_id: string; expires_at: number; is_expired: boolean }> = {};
+  const now = Date.now();
+  
+  for (const [cacheKey, entry] of Object.entries(tokenCache)) {
+    const [userId, serverId] = cacheKey.split(':');
+    result[cacheKey] = {
+      user_id: userId,
+      server_id: serverId,
+      expires_at: entry.expires_at,
+      is_expired: entry.expires_at <= now
+    };
+  }
+  
+  return result;
+}
+
 
 
 export class TwitterServer {
@@ -633,7 +676,121 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
     
     // Create HTTP server to handle requests
     const httpServer = http.createServer((req, res) => {
-      if (req.method === 'POST' && req.url === '/mcp') {
+
+      if (req.method === 'POST' && req.url === '/expired_token') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            const requestData = JSON.parse(body);
+            const { user_id, server_id } = requestData;
+            
+            if (!user_id || !server_id) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                error: 'Bad Request',
+                message: 'user_id and server_id are required'
+              }));
+              return;
+            }
+            
+            // 清除用户缓存的 token 信息
+            const deleted = clearUserTokenCache(user_id, server_id);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Token cache cleared successfully',
+              user_id,
+              server_id,
+              cache_key: `${user_id}:${server_id}`,
+              deleted
+            }));
+          } catch (error) {
+            console.error('Expired token API error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+              error: 'Internal server error',
+              message: 'Failed to clear token cache'
+            }));
+          }
+        });
+      } else if (req.method === 'POST' && req.url === '/get_token_cache') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            const requestData = JSON.parse(body);
+            const { user_id, server_id } = requestData;
+            
+            if (!user_id || !server_id) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                error: 'Bad Request',
+                message: 'user_id and server_id are required'
+              }));
+              return;
+            }
+            
+            // 获取用户 token 缓存状态
+            const cacheStatus = getUserTokenCacheStatus(user_id, server_id);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Token cache status retrieved successfully',
+              user_id,
+              server_id,
+              cache_key: `${user_id}:${server_id}`,
+              cache_status: cacheStatus
+            }));
+          } catch (error) {
+            console.error('Get token cache API error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+              error: 'Internal server error',
+              message: 'Failed to get token cache status'
+            }));
+          }
+        });
+      } else if (req.method === 'GET' && req.url === '/cache/status') {
+        // 获取所有 token 缓存状态
+        try {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          
+          const cacheStatus = getAllTokenCacheStatus();
+          
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            message: 'Token cache status retrieved successfully',
+            cache_count: Object.keys(cacheStatus).length,
+            cache_status: cacheStatus
+          }));
+        } catch (error) {
+          console.error('Cache status API error:', error);
+          res.writeHead(500);
+          res.end(JSON.stringify({ 
+            error: 'Internal server error',
+            message: 'Failed to get cache status'
+          }));
+        }
+      } else if (req.method === 'POST' && req.url === '/mcp') {
         let body = '';
         req.on('data', chunk => {
           body += chunk.toString();
@@ -668,6 +825,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         res.writeHead(400);
         res.end('Not Found');
       }
+      
     });
     
     httpServer.listen(port, () => {
