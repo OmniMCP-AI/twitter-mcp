@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { logger } from './logger.js';
+import bluebird from 'bluebird';
 import { StreamableHTTPServerTransport, StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import http from 'http';
 import {
@@ -33,7 +34,19 @@ interface TokenCacheEntry {
 
 const tokenCache: Record<string, TokenCacheEntry> = {};
 
+const sendCache: Record<string, string> = {};
+
+// 用户发送延迟管理
+interface UserDelayInfo {
+  nextSendTime: number; // 下次可发送时间 (Unix 时间戳)
+  delaySeconds: number; // 当前延迟秒数
+}
+
+const userDelayCache: Record<string, UserDelayInfo> = {};
+
 const ONE_HOUR_MS = 60 * 60;
+const MIN_DELAY_SECONDS = 1; // 最小延迟1秒
+const MAX_DELAY_SECONDS = 5; // 最大延迟5秒
 
 // Token cache management functions
 function clearUserTokenCache(userId: string, serverId: string): boolean {
@@ -76,6 +89,70 @@ function getAllTokenCacheStatus(): Record<string, { user_id: string; server_id: 
   }
   
   return result;
+}
+
+// 用户发送延迟管理函数
+function generateRandomDelay(): number {
+  return Math.floor(Math.random() * (MAX_DELAY_SECONDS - MIN_DELAY_SECONDS + 1)) + MIN_DELAY_SECONDS;
+}
+
+function setUserNextSendTime(userId: string, serverId: string, delaySeconds: number): void {
+  const cacheKey = `${userId}:${serverId}`;
+  const nextSendTime = Date.now() + (delaySeconds * 1000);
+  
+  userDelayCache[cacheKey] = {
+    nextSendTime,
+    delaySeconds
+  };
+  
+  logger.info(`User ${userId} next send time set to: ${new Date(nextSendTime).toLocaleString()}, delay: ${delaySeconds}s`);
+}
+
+function checkUserCanSend(userId: string, serverId: string): { canSend: boolean; waitTime?: number } {
+  const cacheKey = `${userId}:${serverId}`;
+  const delayInfo = userDelayCache[cacheKey];
+  
+  if (!delayInfo) {
+    return { canSend: true };
+  }
+  
+  const now = Date.now();
+  const waitTime = Math.ceil((delayInfo.nextSendTime - now) / 1000);
+  
+  if (now >= delayInfo.nextSendTime) {
+    return { canSend: true };
+  }
+  
+  return { 
+    canSend: false, 
+    waitTime: Math.max(0, waitTime)
+  };
+}
+
+function clearUserDelay(userId: string, serverId: string): boolean {
+  const cacheKey = `${userId}:${serverId}`;
+  const deleted = delete userDelayCache[cacheKey];
+  logger.info(`User delay cleared for ${userId}:${serverId}, deleted: ${deleted}`);
+  return deleted;
+}
+
+function getUserDelayStatus(userId: string, serverId: string): { exists: boolean; nextSendTime?: number; delaySeconds?: number; waitTime?: number } {
+  const cacheKey = `${userId}:${serverId}`;
+  const delayInfo = userDelayCache[cacheKey];
+  
+  if (!delayInfo) {
+    return { exists: false };
+  }
+  
+  const now = Date.now();
+  const waitTime = Math.ceil((delayInfo.nextSendTime - now) / 1000);
+  
+  return {
+    exists: true,
+    nextSendTime: delayInfo.nextSendTime,
+    delaySeconds: delayInfo.delaySeconds,
+    waitTime: Math.max(0, waitTime)
+  };
 }
 
 
@@ -526,6 +603,22 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
   }
 
   private async handleOncePostTweet(args: unknown, headers?: any) {
+    const userId = headers?.user_id;
+    const serverId = headers?.server_id;
+    
+    // 检查用户是否可以发送（延迟检查）
+    if (userId && serverId) {
+      const canSendCheck = checkUserCanSend(userId, serverId);
+      if (!canSendCheck.canSend) {
+        const waitTime = canSendCheck.waitTime || 0;
+        const nextSendTime = new Date(Date.now() + (waitTime * 1000)).toLocaleString();
+        logger.info(`${userId} rate limited, waiting ${waitTime} seconds. Next send time: ${nextSendTime}`);
+        // 等待剩余的秒数
+        // await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+        await bluebird.delay(waitTime * 1000);
+        logger.info(`${userId} wait completed, proceeding with tweet`);
+      }
+    }
     
     const client = await this.getUserClient(args, headers)
 
@@ -551,8 +644,16 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const tweet = await client.postTweet(result.data.text, result.data.reply_to_tweet_id, mediaIds);
       tweetId = tweet.id;
       logger.info(`${headers?.user_id} handlePostTweet tweetId: ${tweetId}`)
+      
+      // 发送成功后设置随机延迟
+      if (tweetId) {
+        const delaySeconds = generateRandomDelay();
+        setUserNextSendTime(userId, serverId, delaySeconds);
+        logger.info(`${userId} tweet sent successfully, next send allowed in ${delaySeconds} seconds`);
+      }
     } catch (error: any) {
       logger.info(`${headers?.user_id} handlePostTweet error: ${error.message}`)
+      throw error; // 重新抛出错误，让上层处理
     }
 
     return tweetId
@@ -764,6 +865,94 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
             res.end(JSON.stringify({ 
               error: 'Internal server error',
               message: 'Failed to get token cache status'
+            }));
+          }
+        });
+      } else if (req.method === 'POST' && req.url === '/get_delay_status') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            const requestData = JSON.parse(body);
+            const { user_id, server_id } = requestData;
+            
+            if (!user_id || !server_id) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                error: 'Bad Request',
+                message: 'user_id and server_id are required'
+              }));
+              return;
+            }
+            
+            // 获取用户延迟状态
+            const delayStatus = getUserDelayStatus(user_id, server_id);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              message: 'User delay status retrieved successfully',
+              user_id,
+              server_id,
+              delay_status: delayStatus
+            }));
+          } catch (error) {
+            console.error('Get delay status API error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+              error: 'Internal server error',
+              message: 'Failed to get delay status'
+            }));
+          }
+        });
+      } else if (req.method === 'POST' && req.url === '/clear_delay') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          try {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            const requestData = JSON.parse(body);
+            const { user_id, server_id } = requestData;
+            
+            if (!user_id || !server_id) {
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                error: 'Bad Request',
+                message: 'user_id and server_id are required'
+              }));
+              return;
+            }
+            
+            // 清除用户延迟
+            const deleted = clearUserDelay(user_id, server_id);
+            
+            res.writeHead(200);
+            res.end(JSON.stringify({
+              success: true,
+              message: 'User delay cleared successfully',
+              user_id,
+              server_id,
+              deleted
+            }));
+          } catch (error) {
+            console.error('Clear delay API error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ 
+              error: 'Internal server error',
+              message: 'Failed to clear delay'
             }));
           }
         });

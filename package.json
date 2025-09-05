@@ -28,6 +28,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.17.0",
     "axios": "^1.11.0",
+    "bluebird": "^3.7.2",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.7",
     "https-proxy-agent": "^7.0.6",
@@ -37,6 +38,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/bluebird": "^3.5.42",
     "@types/node": "^20.11.24",
     "typescript": "^5.3.3"
   },
