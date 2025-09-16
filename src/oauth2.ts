@@ -33,9 +33,10 @@ async function update_config_prod(userId: string, serverId: string, refreshToken
       },
       scope: 'private',
     });
-    console.error(response?.data);
+    logger.info(`${userId} update ${serverId} user config response: ${JSON.stringify(response.data)}`)
+    logger.info(`${userId} update ${serverId} user config success, refreshToken: ${refreshToken}`)
   } catch (error) {
-    console.error('Error update user config:', error);
+    logger.info(`${userId} update ${serverId} user config failed, refreshToken: ${refreshToken}`)
     throw new Error('Error update user config');
   }
 }
@@ -157,9 +158,9 @@ export class OAuth2Helper {
         update_config_prod(userId, serverId, result.refresh_token, dev_url || updateConfigUrl),
         update_config_prod(userId, serverId, result.refresh_token, prod_url || extraUpdateConfig)
       ]);
-      logger.info(`${userId} OAuth2 token refresh success`);
+      logger.info(`${userId} OAuth2 token refresh success update ${serverId}`);
     } catch (configError: any) {
-      logger.info(`${userId} OAuth2 token refresh failed: ${configError.message}`);
+      logger.info(`${userId} OAuth2 token refresh failed: ${configError.message} update ${serverId}`);
     }
 
     return result
