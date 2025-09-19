@@ -3,6 +3,7 @@ import { Config, TwitterError, Tweet, TwitterUser, PostedTweet, LegacyConfig, OA
 import { OAuth2Helper } from './oauth2.js';
 import fs from 'fs';
 import path from 'path';
+import { logger } from './logger.js';
 
 export class TwitterClient {
   private client: TwitterApi;
@@ -80,16 +81,15 @@ export class TwitterClient {
 
   async getCurrentUser(): Promise<TwitterUser> {
     try {
-      console.error('[Twitter API Debug] Getting current user...');
+      logger.info('[Twitter API Debug] Getting current user...');
       const endpoint = 'users/me';
       await this.checkRateLimit(endpoint);
   
-      console.error('[Twitter API Debug] Making Twitter API call for current user...');
+      logger.info('[Twitter API Debug] Making Twitter API call for current user...');
       const response = await this.client.v2.me({
         'user.fields': ['username', 'name', 'verified']
       });
-  
-      console.error('[Twitter API Debug] Current user API response:', {
+      logger.info('[Twitter API Debug] Current user API response:', {
         id: response.data.id,
         username: response.data.username,
         name: response.data.name
@@ -100,7 +100,7 @@ export class TwitterClient {
         username: response.data.username
       };
     } catch (error) {
-      console.error('[Twitter API Debug] Error getting current user:', error);
+      logger.info('[Twitter API Debug] Error getting current user:', error);
       this.handleApiError(error);
     }
   }
@@ -120,18 +120,18 @@ export class TwitterClient {
         tweetOptions.media = { media_ids: mediaIds };
       }
 
-      console.log(`Posting tweet: ${tweetOptions}`);
+      logger.info(`Posting tweet: ${tweetOptions}`);
 
       const response = await this.client.v2.tweet(tweetOptions);
       
-      console.error(`Tweet posted successfully with ID: ${response.data.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
-      
+      logger.info(`Tweet posted successfully with ID: ${response.data.id}${replyToTweetId ? ` (reply to ${replyToTweetId})` : ''}`);
       return {
         id: response.data.id,
         text: response.data.text
       };
     } catch (error) {
-      console.log(error);
+      logger.info('Error in postTweet method: text', text);
+      logger.info('Error in postTweet method:', JSON.stringify(error));
       this.handleApiError(error);
     }
   }
@@ -146,14 +146,12 @@ export class TwitterClient {
       const endpoint = 'media/upload';
       await this.checkRateLimit(endpoint);
 
-      console.log('uploadMedia *** ', mimeType)
-
       const mediaId = await this.client.v2.uploadMedia(buffer, { 
         media_type: mimeType 
       })
       return mediaId
     } catch (error) {
-      console.error('Error in uploadMedia method:', error);
+      logger.info('Error in uploadMedia method:', JSON.stringify(error));
       this.handleApiError(error);
     }
   }
@@ -221,9 +219,8 @@ export class TwitterClient {
 
     // Handle twitter-api-v2 errors
     const apiError = error as any;
-    
-    // Log detailed error information
-    console.error('Twitter API Error Details:', {
+
+    logger.info('Twitter API Error Details:', {
       message: apiError.message,
       code: apiError.code,
       status: apiError.status,
@@ -279,7 +276,7 @@ export class TwitterClient {
     }
 
     // Handle unexpected errors
-    console.error('Unexpected error in Twitter client:', error);
+    logger.info('Unexpected error in Twitter client:', error);
     throw new TwitterError(
       'An unexpected error occurred while communicating with Twitter API',
       'internal_error',
