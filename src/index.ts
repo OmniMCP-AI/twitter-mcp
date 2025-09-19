@@ -595,10 +595,7 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       return client
     }catch (error: any) {
       logger.info(`${headers?.user_id} handlePostTweet error: ${error.message}`)
-      throw new McpError(
-          401,
-          `auth failed with error: ${error.message}`
-      );
+      throw new TwitterError('Twitter authorization failed. Please reauthorize and try again.', 'auth_failed', 401)
     }
   }
 
@@ -624,19 +621,21 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
 
     const result = PostTweetSchema.safeParse(args);
     if (!result.success) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${result.error.message}`
-      );
+      // throw new McpError(
+      //   ErrorCode.InvalidParams,
+      //   `Invalid parameters: ${result.error.message}`
+      // );
+      throw new TwitterError('Invalid parameters. Please check your parameters and try again.', 'invalid_params', 400)
     }
 
     const mediaIds = await this.handleUploadMedia(client, result.data.images, result.data.videos)
 
     if (((result.data.images && result.data.images.length > 0) || (result.data.videos && result.data.videos.length > 0)) && mediaIds.length == 0) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: Invalid media`
-      );
+      // throw new McpError(
+      //   ErrorCode.InvalidParams,
+      //   `Invalid parameters: Invalid media`
+      // );
+      throw new TwitterError('Invalid media. Please check your media and try again.', 'invalid_media', 400)
     }
 
     let tweetId = '';
@@ -727,11 +726,12 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
       const mediaId = await client.uploadMedia(imageBuffer, extractedMimeType as EUploadMimeType)
       return mediaId;
     } catch (error: any) {
-      console.error('上传 Twitter Media 失败:', error)
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Invalid parameters: ${error.message}`
-      );
+      logger.info('上传 Twitter Media 失败:', error)
+      // throw new McpError(
+      //   ErrorCode.InvalidParams,
+      //   `Invalid parameters: ${error.message}`
+      // );
+      throw new TwitterError('Invalid media. Please check your media and try again.', 'invalid_media', 400)
     }
   }
 
@@ -759,8 +759,6 @@ You can now use these credentials to initialize the Twitter MCP server with OAut
         }] as TextContent[]
       };
     }
-
-    console.error('Unexpected error:', error);
     throw new McpError(
       ErrorCode.InternalError,
       'An unexpected error occurred'

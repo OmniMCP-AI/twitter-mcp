@@ -138,6 +138,7 @@ export class OAuth2Helper {
       const error = await response.json();
       logger.info(`${userId} OAuth2 token refresh failed: ${error.error_description || error.error}`);
       throw new Error(`OAuth2 token refresh failed: ${error.error_description || error.error}`);
+
     }
 
     const result = await response.json();
